@@ -85,7 +85,7 @@ Please refer to the included demo for in-depth usage tutorials.
 - `connect(address, baudrate, id, coding, wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store the control module's model number into "id" (character array), the current coding into "coding" and the workshop code into "wsc".
 - `VIN(id)` - will store the control module's identification field (which often contains serial numbers or the vehicle's VIN) into "id" (character array).
 - `Login(login_code, wsc)` - attempt to login with a code, the workshop code can be random, but if you want to recode it, you will have to provide the desired wsc and then recode
-- `Coding(code, wsc)` - recode the module
+- `Coding(code, wsc)` - recode the module. This will also store the coding it reads after the operation is completed (into the same variable that provided the code).
 - `readFaults(dtc, startFrom, amount)` - will read the module's fault codes and store them into "dtc" (16-bit variable array), starting from the "startFrom"-th DTC and storing the "amount" number of them. Considerations:
 - 1. "amount" must be less than or equal to the size of the "dtc" array.
 - 2. the function will give the number of DTCs available on the module as a return-value, indifferent to the parameters given to the function.
@@ -95,8 +95,12 @@ Please refer to the included demo for in-depth usage tutorials.
 - `Adaptation(channel, value, wsc)` - store a value at an adaptation channel, also provide a 5-digit workshop code (doesn't matter, just has to be there). The function will give the value it reads from the channel after adaptation as a return-value.
 - `MeasBlocks(group, value1, value2, value3, value4)` - store the 4 values read from a group (0x00-0xFF) into 4 float-variables (value1, value2, value3, value4).
 - `SingleReading(group, index, value)` - store the "index"-th reading from a group into the "value" float-variable.
-- `MeasBlocksWithUnits(group, value1, value2, value3, value4, type1, a1, b1, type2, a2, b2, type3, a3, b3, type4, a4, b4)` - in addition to `MeasBlocks()`, it also stores the 12 (3 for each value) variables required for determining the units of measurement for the value.
-- `SingleReadingWithUnits(group, index, type, a, b, value)` - in addition to `SingleReading`, it also stores the 3 variables required for determining the units of measurement for the value.
+- `MeasBlocksWithUnits(group, value1, value2, value3, value4, type1, a1, b1, type2, a2, b2, type3, a3, b3, type4, a4, b4)` - in addition to MeasBlocks(), it also stores the 12 (3 for each value) variables required for determining the units of measurement for the value.
+- `SingleReadingWithUnits(group, index, type, a, b, value)` - in addition to SingleReading(), it also stores the 3 variables required for determining the units of measurement for the value.
 - `getUnits(type, a, b, units)` - it's given those 3 variables returned by the functions above and it stores the units of measurement in the "units" character array.
 - `keepAlive()` - don't let the connection stop while not fetching data, if not used the communication would die after ~250ms of inactivity
-##Returns
+- `define_reset_function(function)` - define which function to execute if the communication resets (explained in the demo).
+- `define_wait_5baud_function(function)` - define which function to execute while the communication is initialising (explained in the demo).
+- `currAddr` - stores the address that it's currently connected to
+####
+All functions return different exit codes in case of errors. They are defined in the `KW1281_dv.h` file and are showcased in the demo.
