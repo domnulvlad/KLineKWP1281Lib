@@ -54,9 +54,6 @@ My solution
 ####
 ![Front side, after mod](media/PCB_front-side_after.png)
 ![Back side, after mod](media/PCB_back-side_after.png)
-#### Connection diagram:
-####
-![Schematic](media/schematic.png)
 ---
 #### Installation location
 - For my testing I have been using an original VAG Instruments cluster on my workbench, to which I have connected the adapter board directly to the K-Line.
@@ -75,8 +72,8 @@ My solution
 - If your project is independent from USB cables, the Arduino and cable will need 5V power. The neatest solution is using a step-down converter module, but a hackier approach could be repurposing a car phone charger, let your creativity flow.
 ![permanent power](media/power_permanent.png)
 - Also, if your project is mostly computer-independent but you plan on connecting it to a computer occasionally (for debugging, for example), consider adding a switch in series to the 5V output of your regulator of choice, as powering an Arduino both from the USB cable and another source at the same time could have bad results.
-![temporary power](media/power_s-kontakt.png)
 - A worry for computer-independent projects connected permanently to 12V is of course parasitic power draw. If your project is installed permanently, consider "stealing" the 12V from an S-Kontakt wire instead of permanent 12V.
+![temporary power](media/power_s-kontakt.png)
 
 ## The Arduino side of things
 This code has been tested well on the Arduino UNO (and it will work the same on its smaller counterparts, the Nano, Pro Micro and Pro Mini). Itshould work fine on the MEGA as well, but I haven't tested it yet.
@@ -84,6 +81,9 @@ This code has been tested well on the Arduino UNO (and it will work the same on 
 Bundled is a copy of the *SoftwareSerial* library, so no additional libraries are necesarry for the core operation.
 #####
 Also included is a full library demo, `KW1281_dv_Demo.ino`.
+#### Connection diagram:
+####
+![Schematic](media/schematic.png)
 ### Using the library
 Please refer to the included demo for in-depth usage tutorials.
 - `KW1281_dv KWP(RX, TX)` - create the object, specifying to which pins RX and TX are connected, can be any digital pins except for 0 and 1.
