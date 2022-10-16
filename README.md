@@ -35,7 +35,7 @@
 For simple cables, [**Alexander Grau**'s method](http://grauonline.de/wordpress/wp-content/uploads/obd_adapter_arduino.jpg) is the most straightforward.
 - The idea is to cut the connection between the level shifter and the USB chip on the TX (transmit line) so it doesn't interfere with our communications.
 - The TX (receive line) can be left alone because it has no negative effects on communication.
-- The 5V power to the cable is not necessary after the mod, but the 12V from the car is, it will set the voltage level of the serial interface... and don't forget the ground!
+- The both 5V and 12V power to the cable are necessary, read below about power options... and don't forget the ground!
 ####
 It's also possible with more complicated cables, as [**mkirbst** shows on GitHub](https://github.com/mkirbst/lupo-gti-tripcomputer-kw1281).
 - The core idea is the same, but the author chose to cut both data lines.
@@ -54,6 +54,9 @@ My solution
 ####
 ![Front side, after mod](media/PCB_front-side_after.png)
 ![Back side, after mod](media/PCB_back-side_after.png)
+#### Connection diagram:
+####
+![Schematic](media/schematic.png)
 ---
 #### Installation location
 - For my testing I have been using an original VAG Instruments cluster on my workbench, to which I have connected the adapter board directly to the K-Line.
@@ -63,13 +66,13 @@ My solution
 + For the time being, these are installation methods I have thought of:
 + 1. non-intrusive: cable going from OBD2 connector to an external Arduino connected in turn to a computer (for debugging, logging, scanning, coding)
 + 2. non-intrusive: OBD2 connector with a small-form-factor Arduino inside, eventually with an USB cable to a computer
-+ 3. slightly intrusive: cable tapped into the K-Line of the cluster or the radio and then going somewhere like the glovebox to an Arduino  (connected to a computer or not) - much neater, and with an added advantage: both of those modules have an S-Kontakt connection available, through which you can check if the vehicle's ignition is on; there is no such connection on the standard OBD2 diagnostic port.
++ 3. slightly intrusive: cable tapped into the K-Line of the cluster or the radio and then going somewhere like the glovebox to an Arduino  (connected to a computer or not) - much neater, and with an added advantage: both of those modules have an S-Kontakt connection available, through which you can check if the vehicle's ignition is on (voltage divider of 2.2K and 1k ohm); there is no such connection on the standard OBD2 diagnostic port.
 ---
 #### Powering options
 - If your project requires a computer attached to the Arduino, then you don't need a power source for it. All that is needed is the 12V connection to the cable, which is readily available (on the OBD2 connector or wherever else next to a control module).
 ####
 ![OBD2 port](media/OBD2.png)
-- If your project is independent from USB cables, the Arduino will need 5V power. The neatest solution is using a step-down converter module, but a hackier approach could be repurposing a car phone charger, let your creativity flow.
+- If your project is independent from USB cables, the Arduino and cable will need 5V power. The neatest solution is using a step-down converter module, but a hackier approach could be repurposing a car phone charger, let your creativity flow.
 - Also, if your project is mostly computer-independent but you plan on connecting it to a computer occasionally (for debugging, for example), consider adding a switch in series to the 5V output of your regulator of choice, as powering an Arduino both from the USB cable and another source at the same time could have bad results.
 - A worry for computer-independent projects connected permanently to 12V is of course parasitic power draw. If your project is installed permanently, consider "stealing" the 12V from an S-Kontakt wire instead of permanent 12V.
 
@@ -103,4 +106,4 @@ Please refer to the included demo for in-depth usage tutorials.
 - `define_wait_5baud_function(function)` - define which function to execute while the communication is initialising (explained in the demo).
 - `currAddr` - stores the address that it's currently connected to
 ####
-All functions return different exit codes in case of errors. They are defined in the `KW1281_dv.h` file and are showcased in the demo.
+All functions return different exit codes in case of errors. They are all defined in the `KW1281_dv.h` file and are showcased in the demo.
