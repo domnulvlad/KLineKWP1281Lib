@@ -1,0 +1,55 @@
+#######################################
+# Syntax Coloring Map For KW1281_dv
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+KW1281_dv	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+connect	KEYWORD2
+disconnect	KEYWORD2
+define_reset_function	KEYWORD2
+define_wait_5baud_function	KEYWORD2
+readFaults	KEYWORD2
+clearFaults	KEYWORD2
+VIN	KEYWORD2
+Coding	KEYWORD2
+readAdaptation	KEYWORD2
+testAdaptation	KEYWORD2
+Adaptation	KEYWORD2
+MeasBlocks	KEYWORD2
+MeasBlocksWithUnits	KEYWORD2
+SingleReading	KEYWORD2
+SingleReadingWithUnits	KEYWORD2
+Login	KEYWORD2
+keepAlive	KEYWORD2
+calculateResult	KEYWORD2
+getUnits	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+RETURN_SUCCESS	LITERAL1
+RETURN_TIMEOUT_ERROR	LITERAL1
+RETURN_COMPLEMENT_ERROR	LITERAL1
+RETURN_MAXMSGSIZE_ERROR	LITERAL1
+RETURN_BLOCKCOUNT_ERROR	LITERAL1
+RETURN_NULLSIZE_ERROR	LITERAL1
+RETURN_RECEIVE_ERROR	LITERAL1
+RETURN_SEND_ERROR	LITERAL1
+RETURN_UNEXPECTEDANSWER_ERROR	LITERAL1
+RETURN_LOGIN_ERROR	LITERAL1
+RETURN_INVALID_ERROR	LITERAL1
+FORMULA_OIL_PRESSURE	LITERAL1
+FORMULA_TIME	LITERAL1
+FORMULA_TEXT1	LITERAL1
+FORMULA_TEXT2	LITERAL1
+currAddr	LITERAL1
+

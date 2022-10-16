@@ -108,3 +108,9 @@ Please refer to the included demo for in-depth usage tutorials.
 - `currAddr` - stores the address that it's currently connected to
 ####
 All functions return different exit codes in case of errors. They are all defined in the `KW1281_dv.h` file and are showcased in the demo.
+## Credits
+Thanks go out to these people for their efforts:
+* [Blafusel.de](https://www.blafusel.de/obd/obd2_kw1281.html), for the best documentation available for the protocol
+* [Alexander Grau](http://grauonline.de/wordpress/?p=74), for the base code
+## Contact
+For any inquiries, you can contact me at [ne555timer@yahoo.com](ne555timer@yahoo.com).
