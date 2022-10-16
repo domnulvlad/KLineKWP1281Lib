@@ -25,12 +25,11 @@
 - "Security Access"
 - "Basic Settings"
 - labels
-
+---
 ## Hardware setup
 + The easiest way to obtain an adapter is to modify a VAG-KKL cable, the cheaper the better.
 + The cheapest cables often contain a Serial-to-USB chip (commonly WCH‑CH340G or FTDI‑FT232RL), which we don't need and a 12V-5V level shifter, usually an LM339 comparator, which we are interested in.
 + In essence, the K-Line diagnostic protocol is just a serial interface with 12V logic.
----
 #### Modifying a cable
 For simple cables, [**Alexander Grau**'s method](http://grauonline.de/wordpress/wp-content/uploads/obd_adapter_arduino.jpg) is the most straightforward.
 - The idea is to cut the connection between the level shifter and the USB chip on the TX (transmit line) so it doesn't interfere with our communications.
