@@ -51,7 +51,6 @@ My solution
 ![Front side, before mod](media/PCB_front-side_before.png)
 ![Back side, before mod](media/PCB_back-side_before.png)
 #### After mods:
-####
 ![Front side, after mod](media/PCB_front-side_after.png)
 ![Back side, after mod](media/PCB_back-side_after.png)
 ---
@@ -99,9 +98,9 @@ Please refer to the included demo for in-depth usage tutorials.
 - `Adaptation(channel, value, wsc)` - store a value at an adaptation channel, also provide a 5-digit workshop code (doesn't matter, just has to be there). The function will give the value it reads from the channel after adaptation as a return-value.
 - `MeasBlocks(group, value1, value2, value3, value4)` - store the 4 values read from a group (0x00-0xFF) into 4 float-variables (value1, value2, value3, value4).
 - `SingleReading(group, index, value)` - store the "index"-th reading from a group into the "value" float-variable.
-- `MeasBlocksWithUnits(group, value1, value2, value3, value4, type1, a1, b1, type2, a2, b2, type3, a3, b3, type4, a4, b4)` - in addition to MeasBlocks(), it also stores the 12 (3 for each value) variables required for determining the units of measurement for the value.
-- `SingleReadingWithUnits(group, index, type, a, b, value)` - in addition to SingleReading(), it also stores the 3 variables required for determining the units of measurement for the value.
-- `getUnits(type, a, b, units)` - it's given those 3 variables returned by the functions above and it stores the units of measurement in the "units" character array.
+- `MeasBlocksWithUnits(group, value1, value2, value3, value4, type1, type2, type3, type4)` - in addition to MeasBlocks(), it also stores the 4 variables required for determining the units of measurement for each value.
+- `SingleReadingWithUnits(group, index, type, value)` - in addition to SingleReading(), it also stores the variable required for determining the units of measurement for the value.
+- `getUnits(type, units)` - it's given the variable returned by the functions above and it stores the units of measurement in the "units" character array.
 - `keepAlive()` - don't let the connection stop while not fetching data, if not used the communication would die after ~250ms of inactivity
 - `define_reset_function(function)` - define which function to execute if the communication resets (explained in the demo).
 - `define_wait_5baud_function(function)` - define which function to execute while the communication is initialising (explained in the demo).
@@ -112,5 +111,6 @@ All functions return different exit codes in case of errors. They are all define
 Thanks go out to these people for their efforts:
 * [Blafusel.de](https://www.blafusel.de/obd/obd2_kw1281.html), for the best documentation available for the protocol
 * [Alexander Grau](http://grauonline.de/wordpress/?p=74), for the base code
+* [Mike Naberezny](https://github.com/mnaberez/vwradio/blob/main/kwp1281_tool/firmware/kwp1281.h)
 ## Contact
 For any inquiries, you can contact me at [ne555timer@yahoo.com](ne555timer@yahoo.com).
