@@ -85,8 +85,7 @@ Please refer to the included demo for in-depth usage tutorials.
 - `connect(address, baudrate, id, coding, wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store the control module's model number into "id" (character array), the current coding into "coding" and the workshop code into "wsc"
 - `VIN(id)` - will store the control module's identification field (which often contains serial numbers or the vehicle's VIN) into "id" (character array)
 - `readFaults(dtc, startFrom, amount)` - will read the module's fault codes and store them into "dtc" (16-bit variable array), starting from the "startFrom"-th DTC and storing the "amount" number of them
-- - considerations:
-- - 1. "amount" must be less than or equal to the size of the "dtc" array
-- - 2. the function will return the number of DTCs available on the module, indifferent to the parameters given to the function
+- 1. "amount" must be less than or equal to the size of the "dtc" array; considerations:
+- 2. the function will return the number of DTCs available on the module, indifferent to the parameters given to the function
 
 ##Returns
