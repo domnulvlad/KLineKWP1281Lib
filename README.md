@@ -74,4 +74,6 @@ My solution
 - A worry for computer-independent projects connected permanently to 12V is of course parasitic power draw. If your project is installed permanently, consider "stealing" the 12V from an S-Kontakt wire instead of permanent 12V.
 
 ## The Arduino side of things
-This code has been tested well on the Arduino UNO (and it will work the same on its smaller counterparts, the Nano, Pro Micro and Pro Mini), and should work on MEGA as well.
+This code has been tested well on the Arduino UNO (and it will work the same on its smaller counterparts, the Nano, Pro Micro and Pro Mini). Itshould work fine on the MEGA as well, but I haven't tested it yet.
+#####
+Bundled is a copy of the *SoftwareSerial* library so no additional libraries are necesarry for the core operation.
