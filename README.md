@@ -81,11 +81,20 @@ Bundled is a copy of the *SoftwareSerial* library, so no additional libraries ar
 Also included is a full library demo, `KW1281_dv_Demo.ino`.
 ### Using the library
 Please refer to the included demo for in-depth usage tutorials.
-- `KW1281_dv KWP(RX, TX);` - create the object, specifying to which pins RX and TX are connected, can be any digital pins except for 0 and 1
-- `connect(address, baudrate, id, coding, wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store the control module's model number into "id" (character array), the current coding into "coding" and the workshop code into "wsc"
-- `VIN(id)` - will store the control module's identification field (which often contains serial numbers or the vehicle's VIN) into "id" (character array)
-- `readFaults(dtc, startFrom, amount)` - will read the module's fault codes and store them into "dtc" (16-bit variable array), starting from the "startFrom"-th DTC and storing the "amount" number of them
-- 1. "amount" must be less than or equal to the size of the "dtc" array; considerations:
-- 2. the function will return the number of DTCs available on the module, indifferent to the parameters given to the function
-
+- `KW1281_dv KWP(RX, TX);` - create the object, specifying to which pins RX and TX are connected, can be any digital pins except for 0 and 1.
+- `connect(address, baudrate, id, coding, wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store the control module's model number into "id" (character array), the current coding into "coding" and the workshop code into "wsc".
+- `VIN(id)` - will store the control module's identification field (which often contains serial numbers or the vehicle's VIN) into "id" (character array).
+- `readFaults(dtc, startFrom, amount)` - will read the module's fault codes and store them into "dtc" (16-bit variable array), starting from the "startFrom"-th DTC and storing the "amount" number of them. Considerations:
+- 1. "amount" must be less than or equal to the size of the "dtc" array.
+- 2. the function will give the number of DTCs available on the module as a return-value, indifferent to the parameters given to the function.
+- `clearFaults()` - erases all fault codes from the module. You should run readFaults() afterwards to check if all were cleared.
+- `readAdaptation(channel)` - read the value on an adaptation channel (0x00-0xFF). The value stored will be given as a return-value.
+- `testAdaptation(channel, value)` - test if a value would be accepted by an adaptation channel. If it wouldn't be accepted, the function will give an acceptable value as a return-value.
+- `Adaptation(channel, value, wsc)` - store a value at an adaptation channel, also provide a 5-digit workshop code (doesn't matter, just has to be there). The function will give the value it reads from the channel after adaptation as a return-value.
+- `MeasBlocks(group, value1, value2, value3, value4)` - store the 4 values read from a group (0x00-0xFF) into 4 float-variables (value1, value2, value3, value4).
+- `SingleReading(group, index, value)` - store the "index"-th reading from a group into the "value" float-variable.
+- `MeasBlocksWithUnits(group, value1, value2, value3, value4, type1, a1, b1, type2, a2, b2, type3, a3, b3, type4, a4, b4)` - in addition to `MeasBlocks()`, it also stores the 12 (3 for each value) variables required for determining the units of measurement for the value.
+- `SingleReadingWithUnits(group, index, type, a, b, value)` - in addition to `SingleReading`, it also stores the 3 variables required for determining the units of measurement for the value.
+- `getUnits(type, a, b, units)` - it's given those 3 variables returned by the functions above and it stores the units of measurement in the "units" character array.
+- `keepAlive()` - don't let the connection stop while not fetching data, if not used the communication would die after ~250ms of inactivity
 ##Returns
