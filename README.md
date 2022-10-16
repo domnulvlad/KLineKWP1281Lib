@@ -67,13 +67,15 @@ My solution
 + 1. non-intrusive: cable going from OBD2 connector to an external Arduino connected in turn to a computer (for debugging, logging, scanning, coding)
 + 2. non-intrusive: OBD2 connector with a small-form-factor Arduino inside, eventually with an USB cable to a computer
 + 3. slightly intrusive: cable tapped into the K-Line of the cluster or the radio and then going somewhere like the glovebox to an Arduino  (connected to a computer or not) - much neater, and with an added advantage: both of those modules have an S-Kontakt connection available, through which you can check if the vehicle's ignition is on (voltage divider of 2.2K and 1k ohm); there is no such connection on the standard OBD2 diagnostic port.
+####
+![OBD2 port](media/OBD2.png)
 ---
 #### Powering options
 - If your project requires a computer attached to the Arduino, then you don't need a power source for it. All that is needed is the 12V connection to the cable, which is readily available (on the OBD2 connector or wherever else next to a control module).
-####
-![OBD2 port](media/OBD2.png)
 - If your project is independent from USB cables, the Arduino and cable will need 5V power. The neatest solution is using a step-down converter module, but a hackier approach could be repurposing a car phone charger, let your creativity flow.
+![permanent power](media/power_permanent.png)
 - Also, if your project is mostly computer-independent but you plan on connecting it to a computer occasionally (for debugging, for example), consider adding a switch in series to the 5V output of your regulator of choice, as powering an Arduino both from the USB cable and another source at the same time could have bad results.
+![temporary power](media/power_s-kontakt.png)
 - A worry for computer-independent projects connected permanently to 12V is of course parasitic power draw. If your project is installed permanently, consider "stealing" the 12V from an S-Kontakt wire instead of permanent 12V.
 
 ## The Arduino side of things
