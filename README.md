@@ -82,7 +82,6 @@ Bundled is a copy of the *SoftwareSerial* library, so no additional libraries ar
 #####
 Also included is a full library demo, `KW1281_dv_Demo.ino`.
 #### Connection diagram:
-####
 ![Schematic](media/schematic.png)
 ### Using the library
 Please refer to the included demo for in-depth usage tutorials.
