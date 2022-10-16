@@ -82,4 +82,4 @@ Also included is a full library demo, `KW1281_dv_Demo.ino`.
 ### Using the library
 Please refer to the included demo for in-depth usage tutorials.
 - `KW1281_dv KWP(RX, TX);` - create the object, specifying to which pins RX and TX are connected, can be any digital pins except for 0 and 1
-- `connect(address, baudrate, &id, &coding, &wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store a character array containing the control module's number, the current coding and workshop code
+- `connect(address, baudrate, &id, &coding, &wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store a character array containing the control module's number, another variable containing the current coding and another variable containing the workshop code
