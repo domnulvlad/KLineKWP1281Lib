@@ -111,6 +111,6 @@ All functions return different exit codes in case of errors. They are all define
 Thanks go out to these people for their efforts:
 * [Blafusel.de](https://www.blafusel.de/obd/obd2_kw1281.html), for the best documentation available for the protocol
 * [Alexander Grau](http://grauonline.de/wordpress/?p=74), for the base code
-* [Mike Naberezny](https://github.com/mnaberez/vwradio/blob/main/kwp1281_tool/firmware/kwp1281.h)
+* [Mike Naberezny](https://github.com/mnaberez/vwradio/blob/main/kwp1281_tool/firmware/kwp1281.h), for more insight about the commands and parameters
 ## Contact
-For any inquiries, you can contact me at [ne555timer@yahoo.com](ne555timer@yahoo.com).
+For any inquiries, you can contact me at [ne555timer@yahoo.com](mailto:ne555timer@yahoo.com).
