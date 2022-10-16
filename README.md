@@ -50,6 +50,10 @@ My solution
 ####
 ![Front side, before mod](media/PCB_front-side_before.png)
 ![Back side, before mod](media/PCB_back-side_before.png)
+#### After mods:
+####
+![Front side, after mod](media/PCB_front-side_after.png)
+![Back side, after mod](media/PCB_back-side_after.png)
 ---
 #### Installation location
 - For my testing I have been using an original VAG Instruments cluster on my workbench, to which I have connected the adapter board directly to the K-Line.
