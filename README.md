@@ -28,7 +28,7 @@
 ---
 ## Hardware setup
 + The easiest way to obtain an adapter is to modify a VAG-KKL cable, the cheaper the better.
-+ The cheapest cables often contain a Serial-to-USB chip (commonly WCH‑CH340G or FTDI‑FT232RL), which we don't need and a 12V-5V level shifter, usually an LM339 comparator, which we are interested in.
++ The cheapest cables often contain a Serial-to-USB chip (commonly WCH-CH340 or FTDI-FT232RL), which we don't need and a 12V-5V level shifter, usually an LM339 comparator, which we are interested in.
 + In essence, the K-Line diagnostic protocol is just a serial interface with 12V logic.
 #### Modifying a cable
 For simple cables, [**Alexander Grau**'s method](http://grauonline.de/wordpress/wp-content/uploads/obd_adapter_arduino.jpg) is the most straightforward.
@@ -57,7 +57,7 @@ My solution
 - For my testing I have been using an original VAG Instruments cluster on my workbench, to which I have connected the adapter board directly to the K-Line.
 - In reality, this project will most likely be useful in logging values, installing custom displays or DIY scan tools.
 - As such, my hardware setup solution above is useful in the scenario of a scan tool. A much neater approach would be including an Arduino Nano / Pro Micro + step-down voltage regulator inside the housing of the OBD2 connector, or even an Arduino Pro Mini for use cases where the USB connection to a computer is not necessary (logging to SD cards, custom displays etc).
-- ***One useful detail to consider is that all modules that communicate with this protocol are all connected to the same K-Line. Wherever you choose to connect it either to the external diganostic port or by tapping into the K-Line on the instruments cluster or the radio, you will be able to connect to any module inside the vehicle.***
+- ***One useful detail to consider is that all modules that communicate with this protocol are all connected to the same K-Line. Wherever you choose to connect it either to the external diagnostic port or by tapping into the K-Line on the instruments cluster or the radio, you will be able to connect to any module inside the vehicle.***
 + For the time being, these are installation methods I have thought of:
 + 1. non-intrusive: cable going from OBD2 connector to an external Arduino connected in turn to a computer (for debugging, logging, scanning, coding)
 + 2. non-intrusive: OBD2 connector with a small-form-factor Arduino inside, eventually with an USB cable to a computer
@@ -74,9 +74,9 @@ My solution
 ![temporary power](media/power_s-kontakt.png)
 
 ## The Arduino side of things
-This code has been tested well on the Arduino UNO (and it will work the same on its smaller counterparts, the Nano, Pro Micro and Pro Mini). Itshould work fine on the MEGA as well, but I haven't tested it yet.
+This code has been tested well on the Arduino UNO (and it will work the same on its smaller counterparts, the Nano, Pro Micro and Pro Mini). It should work fine on the MEGA as well, but I haven't tested it yet.
 #####
-Bundled is a copy of the *SoftwareSerial* library, so no additional libraries are necesarry for the core operation.
+Bundled is a copy of the *SoftwareSerial* library, so no additional libraries are necessary for the core operation.
 #####
 Also included is a full library demo, `KW1281_dv_Demo.ino`.
 #### Connection diagram:
