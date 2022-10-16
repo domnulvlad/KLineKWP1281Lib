@@ -47,7 +47,9 @@ My solution
 - Like him, I cut the TX trace, but also the D+ and D- going from the USB cable to the Serial-USB converter chip.
 - Next, I soldered the TX line (point on the cut trace, on the LM393's side) to where USB D- previously was (white wire from USB cable), and then the RX line (point on the circuit board connected as close as possible to the LM393 level shifter) to where D+ previously was (green wire from USB cable). Of course, it's your own choice whether RX and TX correspond to D- and D+ or vice-versa, but don't forget which way you chose.
 - *Warning*, as with every modified USB cable that isn't actual USB anymore... please don't plug it into a computer after modifying!
+####
 ![Front side, before mod](media/PCB_front-side_before.png)
+![Back side, before mod](media/PCB_back-side_before.png)
 ---
 #### Installation location
 - For my testing I have been using an original VAG Instruments cluster on my workbench, to which I have connected the adapter board directly to the K-Line.
