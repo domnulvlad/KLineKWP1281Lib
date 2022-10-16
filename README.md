@@ -84,6 +84,8 @@ Please refer to the included demo for in-depth usage tutorials.
 - `KW1281_dv KWP(RX, TX)` - create the object, specifying to which pins RX and TX are connected, can be any digital pins except for 0 and 1.
 - `connect(address, baudrate, id, coding, wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store the control module's model number into "id" (character array), the current coding into "coding" and the workshop code into "wsc".
 - `VIN(id)` - will store the control module's identification field (which often contains serial numbers or the vehicle's VIN) into "id" (character array).
+- `Login(login_code, wsc)` - attempt to login with a code, the workshop code can be random, but if you want to recode it, you will have to provide the desired wsc and then recode
+- `Coding(code, wsc)` - recode the module
 - `readFaults(dtc, startFrom, amount)` - will read the module's fault codes and store them into "dtc" (16-bit variable array), starting from the "startFrom"-th DTC and storing the "amount" number of them. Considerations:
 - 1. "amount" must be less than or equal to the size of the "dtc" array.
 - 2. the function will give the number of DTCs available on the module as a return-value, indifferent to the parameters given to the function.
