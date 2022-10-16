@@ -82,4 +82,11 @@ Also included is a full library demo, `KW1281_dv_Demo.ino`.
 ### Using the library
 Please refer to the included demo for in-depth usage tutorials.
 - `KW1281_dv KWP(RX, TX);` - create the object, specifying to which pins RX and TX are connected, can be any digital pins except for 0 and 1
-- `connect(address, baudrate, &id, &coding, &wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store a character array containing the control module's number, another variable containing the current coding and another variable containing the workshop code
+- `connect(address, baudrate, id, coding, wsc)` - attempt connecting to an address (0x01-0xFF) at a baudrate (4800/9600/10400), will store the control module's model number into "id" (character array), the current coding into "coding" and the workshop code into "wsc"
+- `VIN(id)` - will store the control module's identification field (which often contains serial numbers or the vehicle's VIN) into "id" (character array)
+- `readFaults(dtc, startFrom, amount)` - will read the module's fault codes and store them into "dtc" (16-bit variable array), starting from the "startFrom"-th DTC and storing the "amount" number of them
+- - considerations:
+- - 1. "amount" must be less than or equal to the size of the "dtc" array
+- - 2. the function will return the number of DTCs available on the module, indifferent to the parameters given to the function
+
+##Returns
