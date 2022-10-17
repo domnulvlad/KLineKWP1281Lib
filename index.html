@@ -1,0 +1,55 @@
+﻿<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KW1281_dv</title>
+  <link rel="stylesheet" href="https://stackedit.io/style.css" />
+</head>
+
+<body class="stackedit">
+  <div class="stackedit__html"><h2 id="kw1281_dv">KW1281_dv</h2>
+<p><strong>KW1281_dv</strong> is a library used for communicating with VAG control modules which use the proprietary VAG KW1281 / KWP1281 protocol, through an Arduino development board.</p>
+<h2 id="supported-features">Supported features:</h2>
+<ul>
+<li>Connecting to any control module that supports KWP1281</li>
+<li>Reading the module’s part number + extra fields</li>
+<li>Reading coding and WSC code</li>
+<li>Reading the module’s identification field (for example, the vehicle’s VIN)</li>
+<li>“Login”</li>
+<li>“Coding” for changing the coding and/or WSC</li>
+<li>“Fault Codes” for reading stored fault codes</li>
+<li>Clearing stored fault codes</li>
+<li>“Adaptation” for reading an adaptation value on a specified channel</li>
+<li>Testing an adaptation value on a specified channel</li>
+<li>Saving an adaptation value to a specified channel</li>
+<li>Ability to keep the connection alive while doing other tasks</li>
+<li>“Meas. Blocks” reading for an entire Meas. Block (calculating actual value + providing proper units of measurement)</li>
+<li>Reading a single value inside a Meas. Block (calculating actual value + providing proper units of measurement)</li>
+</ul>
+<h2 id="currently-unsupported-features">Currently unsupported features:</h2>
+<ul>
+<li>Reading or writing ROM / EEPROM (firmware)</li>
+<li>“Output Tests”</li>
+<li>“Security Access”</li>
+<li>“Basic Settings”</li>
+<li>Labels</li>
+</ul>
+<h2 id="getting-started">Getting started</h2>
+<p>Download <a href="https://github.com/domnulvlad/KW1281_dv/releases/latest">the latest release (.zip)</a> and <a href="https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries#importing-a-zip-library">add it to your Arduino IDE</a>.</p>
+<p><strong>Read the documentation on the wiki!</strong></p>
+<p>After completing the hardware setup, proceed to upload the demo by navigating to <code>File -&gt; Examples -&gt; KW1281_dv -&gt; KW1281_dv_Demo</code> in the Arduino IDE.</p>
+<h2 id="credits">Credits</h2>
+<p>Thanks go out to these people for their efforts:</p>
+<ul>
+<li><a href="https://www.blafusel.de/obd/obd2_kw1281.html">Blafusel.de</a>, for the best documentation available for the protocol</li>
+<li><a href="http://grauonline.de/wordpress/?p=74">Alexander Grau</a>, for the base code</li>
+<li><a href="https://github.com/mnaberez/vwradio/blob/main/kwp1281_tool/firmware/kwp1281.h">Mike Naberezny</a>, for more insight about the commands and parameters</li>
+</ul>
+<h2 id="contact">Contact</h2>
+<p>For any inquiries, you can contact me at <a href="mailto:ne555timer@yahoo.com">ne555timer@yahoo.com</a>.</p>
+</div>
+</body>
+
+</html>
