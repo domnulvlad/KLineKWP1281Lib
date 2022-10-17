@@ -29,7 +29,7 @@ Download [the latest release (.zip)](https://github.com/domnulvlad/KW1281_dv/rel
 
 **Read [the documentation](../../wiki)** (w.i.p.).
 
-After completing the hardware setup, proceed to upload the demo by going `File -> Examples -> KW1281_dv -> KW1281_dv_Demo`.
+After completing the hardware setup, proceed to upload the demo by navigating to `File -> Examples -> KW1281_dv -> KW1281_dv_Demo`.
 
 ## Credits
 Thanks go out to these people for their efforts:
