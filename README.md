@@ -29,7 +29,7 @@ Download [the latest release (.zip)](https://github.com/domnulvlad/KW1281_dv/rel
 
 **Read the documentation on the wiki!**
 
-After completing the hardware setup, proceed to upload the demo by navigating to `File -> Examples -> KW1281_dv -> KW1281_dv_Demo`.
+After completing the hardware setup, proceed to upload the demo by navigating to `File -> Examples -> KW1281_dv -> KW1281_dv_Demo` in the Arduino IDE.
 
 ## Credits
 Thanks go out to these people for their efforts:
