@@ -290,6 +290,7 @@ char KW1281_dv::connect(uint8_t address, int baud, char id[], uint16_t &coding, 
   Serial.print(F("Connecting to ")); Serial.print(address, HEX); Serial.print(F(" at baud ")); Serial.println(baud);
 #endif
 
+  connected = false;
   blockCounter = 0; //reset the sequence counter
   currAddr = 0;
 
