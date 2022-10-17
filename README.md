@@ -25,7 +25,7 @@
 - "Security Access"
 - "Basic Settings"
 - labels
----
+
 ## Hardware setup
 + The easiest way to obtain an adapter is to modify a VAG-KKL cable, the cheaper the better.
 + The cheapest cables often contain a Serial-to-USB chip (commonly WCH-CH340 or FTDI-FT232RL), which we don't need and a 12V-5V level shifter, usually an LM339 comparator, which we are interested in.
@@ -46,13 +46,15 @@ My solution
 - Like him, I cut the TX trace, but also the D+ and D- going from the USB cable to the Serial-USB converter chip.
 - Next, I soldered the TX line (point on the cut trace, on the LM393's side) to where USB D- previously was (white wire from USB cable), and then the RX line (point on the circuit board connected as close as possible to the LM393 level shifter) to where D+ previously was (green wire from USB cable). Of course, it's your own choice whether RX and TX correspond to D- and D+ or vice-versa, but don't forget which way you chose.
 - *Warning*, as with every modified USB cable that isn't actual USB anymore... please don't plug it into a computer after modifying!
-####
+
+
 ![Front side, before mod](media/PCB_front-side_before.png)
 ![Back side, before mod](media/PCB_back-side_before.png)
+
 #### After mods:
 ![Front side, after mod](media/PCB_front-side_after.png)
 ![Back side, after mod](media/PCB_back-side_after.png)
-***
+
 #### Installation location
 - For my testing I have been using an original VAG Instruments cluster on my workbench, to which I have connected the adapter board directly to the K-Line.
 - In reality, this project will most likely be useful in logging values, installing custom displays or DIY scan tools.
@@ -62,9 +64,9 @@ My solution
 + 1. non-intrusive: cable going from OBD2 connector to an external Arduino connected in turn to a computer (for debugging, logging, scanning, coding)
 + 2. non-intrusive: OBD2 connector with a small-form-factor Arduino inside, eventually with an USB cable to a computer
 + 3. slightly intrusive: cable tapped into the K-Line of the cluster or the radio and then going somewhere like the glovebox to an Arduino  (connected to a computer or not) - much neater, and with an added advantage: both of those modules have an S-Kontakt connection available, through which you can check if the vehicle's ignition is on (voltage divider of 2.2K and 1k ohm); there is no such connection on the standard OBD2 diagnostic port.
-####
+
 ![OBD2 port](media/OBD2.png)
----
+
 #### Powering options
 - If your project requires a computer attached to the Arduino, then you don't need a power source for it. All that is needed is the 12V connection to the cable, which is readily available (on the OBD2 connector or wherever else next to a control module).
 - If your project is independent from USB cables, the Arduino and cable will need 5V power. The neatest solution is using a step-down converter module, but a hackier approach could be repurposing a car phone charger, let your creativity flow.
