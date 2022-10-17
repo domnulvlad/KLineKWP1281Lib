@@ -52,7 +52,7 @@ My solution
 #### After mods:
 ![Front side, after mod](media/PCB_front-side_after.png)
 ![Back side, after mod](media/PCB_back-side_after.png)
----
+***
 #### Installation location
 - For my testing I have been using an original VAG Instruments cluster on my workbench, to which I have connected the adapter board directly to the K-Line.
 - In reality, this project will most likely be useful in logging values, installing custom displays or DIY scan tools.
@@ -104,7 +104,7 @@ Please refer to the included demo for in-depth usage tutorials.
 - `define_reset_function(function)` - define which function to execute if the communication resets (explained in the demo).
 - `define_wait_5baud_function(function)` - define which function to execute while the communication is initialising (explained in the demo).
 - `currAddr` - stores the address that it's currently connected to
-####
+#### Exit codes
 All functions return different exit codes in case of errors. They are all defined in the `KW1281_dv.h` file and are showcased in the demo.
 ## Credits
 Thanks go out to these people for their efforts:
