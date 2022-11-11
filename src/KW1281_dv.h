@@ -74,6 +74,7 @@ class KW1281_dv {
     void define_wait_5baud_function(m_cb functionPointer);
     
     char connect(uint8_t address, int baud, char id[], uint16_t &coding, uint32_t &wsc);
+    void disconnect();
     char VIN(char vin[]);
     char Login(int code, uint32_t wsc);
     char Coding(uint16_t &coding, uint32_t wsc);
@@ -100,7 +101,6 @@ class KW1281_dv {
     uint8_t errorTimeout = 0;
     uint8_t errorData = 0;
     bool connected = false;
-    void disconnect();
     
     uint8_t dtcCounter = 0;
     
