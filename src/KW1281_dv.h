@@ -6,10 +6,10 @@
 
 #include "NewSoftwareSerial.h"
 
-#define DEBUG
+// #define DEBUG
 // #define DEBUG_SHOW_SENT
 // #define DEBUG_SHOW_RECEIVED
-#define DEBUG_SHOW_CURRENT_FUNCTION
+// #define DEBUG_SHOW_CURRENT_FUNCTION
 // #define DEBUG_SHOW_GROUP_VALUES_RAW
 // #define DEBUG_SHOW_ERRORS
 // #define DEBUG_SHOW_INTRO_ID
