@@ -99,6 +99,8 @@ void loop() {
     //37-character-long character array where the module name and extra fields will be stored (37 = 3blocks * 12characters + 1null_temrinator),
     //uint16_t-type variable where the current coding will be stored,
     //uint32_t-type variable where the current workshop code will be stored
+    //
+    //also, connect() can be called with only the address and baudrate if checking the id, coding and wsc isn't necessary
     if (KWP.connect(_17_INSTRUMENTS, _17_INSTRUMENTS_BAUDRATE, id, coding, wsc) == RETURN_SUCCESS) { //run the function and check if the connection was successful
       Serial.print("ID: ");
       Serial.println(id); //print the module name (and extra fields)
