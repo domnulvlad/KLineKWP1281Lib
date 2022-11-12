@@ -6,10 +6,10 @@
 
 #include "NewSoftwareSerial.h"
 
-// #define DEBUG
+#define DEBUG
 // #define DEBUG_SHOW_SENT
 // #define DEBUG_SHOW_RECEIVED
-// #define DEBUG_SHOW_CURRENT_FUNCTION
+#define DEBUG_SHOW_CURRENT_FUNCTION
 // #define DEBUG_SHOW_GROUP_VALUES_RAW
 // #define DEBUG_SHOW_ERRORS
 // #define DEBUG_SHOW_INTRO_ID
@@ -74,6 +74,7 @@ class KW1281_dv {
     void define_wait_5baud_function(m_cb functionPointer);
     
     char connect(uint8_t address, int baud, char id[], uint16_t &coding, uint32_t &wsc);
+    char connect(uint8_t address, int baud);
     void disconnect();
     char VIN(char vin[]);
     char Login(int code, uint32_t wsc);
@@ -112,6 +113,7 @@ class KW1281_dv {
     char KWPReceiveBlock(char receivedMessage[], int maxSize, int &receivedMessageSize);
     char KWPSendAckBlock();
     char KWPReadAscii(char id[], uint16_t &coding, uint32_t &wsc);
+    char KWPReadAscii();
     float calculateResult(uint8_t formula, uint8_t a, uint8_t b);
     
     void if_has_reset();
