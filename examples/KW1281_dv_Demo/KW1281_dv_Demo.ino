@@ -7,9 +7,9 @@
  *  1.  Connecting to a module at a manually-set baud rate
  *  2.  Reading the module's part number + extra fields, the coding and the workshop
  *  3.  Reading the module's identification field (e.g. vehicle's VIN and IMMO serial number for 17-Instruments)
- *  4.  (disabled by default, remove the block comment on lines #114 and #130 in this sketch to enable) - Logging in with a login code, Changing the coding, Changing the WSC
+ *  4.  (disabled by default, remove the block comment on lines #116 and #132 in this sketch to enable) - Logging in with a login code, Changing the coding, Changing the WSC
  *  5.  Reading stored fault codes
- *  6.  (disabled by default, remove the block comment on lines #151 and #156 in this sketch to enable) - Clearing stored fault codes
+ *  6.  (disabled by default, remove the block comment on lines #153 and #158 in this sketch to enable) - Clearing stored fault codes
  *  7.  Reading the adaptation value on a specified channel, Testing a value on a specified channel, Saving a value to a specified channel
  *  8.  Keep-alive function (so the connection is kept while waiting, in this example, for 5 seconds, non-blocking of course)
  *  9.  Reading an entire Measurement Block (Calculating actual value + Providing proper units of measurement)
