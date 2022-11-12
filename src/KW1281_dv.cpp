@@ -315,6 +315,10 @@ char KW1281_dv::connect(uint8_t address, int baud, char id[], uint16_t &coding, 
   Serial.print(F("Connecting to ")); Serial.print(address, HEX); Serial.print(F(" at baud ")); Serial.println(baud);
 #endif
 
+  //call the function which was defined by the user
+  //usually it would contain a 1-second delay and reinitialising variables
+  if_has_reset();
+  
   connected = false;
   blockCounter = 0; //reset the sequence counter
   currAddr = 0;
@@ -387,10 +391,6 @@ void KW1281_dv::disconnect() {
   //but the connection automatically stops when there is no data for around 500ms
   connected = false;
   currAddr = 0;
-
-  //call the function which was defined by the user
-  //usually it would contain a 1-second delay and reinitialising variables
-  if_has_reset();
 }
 
 char KW1281_dv::readFaults(uint16_t faults[], uint8_t startFrom, uint8_t amount) {
