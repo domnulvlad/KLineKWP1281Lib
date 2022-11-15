@@ -118,6 +118,7 @@ char KW1281_dv::KWPReceiveBlock(char receivedMessage[], int maxMessageSize, int 
   }
 
   unsigned long timeout = millis() + 1000;
+  
   while ((receivedMessageCounter == 0) || (receivedMessageCounter != receivedMessageSize)) {
     while (obd->available()) {
       data = obdRead();
@@ -255,12 +256,6 @@ char KW1281_dv::KWPReadAscii(char id[], uint16_t &coding, uint32_t &wsc) {
 
       coding = ((b1 << 8) + ((b2 >> 4) << 4)) >> 1;
       wsc = (((uint32_t)b2 & 0xF) << 16) + (b3 << 8) + b4;
-#ifdef DEBUG
-      Serial.print(F("Coding: "));
-      Serial.print(coding);
-      Serial.print(F(", WSC: "));
-      Serial.println(wsc);
-#endif
       break;
     } else {
       if (first) {
@@ -279,6 +274,40 @@ char KW1281_dv::KWPReadAscii(char id[], uint16_t &coding, uint32_t &wsc) {
 #ifdef DEBUG_SHOW_INTRO_ID
   Serial.println(F("--------"));
 #endif
+  return RETURN_SUCCESS;
+}
+
+char KW1281_dv::KWPReadAscii(uint16_t &coding, uint32_t &wsc) {
+#ifdef DEBUG_SHOW_CURRENT_FUNCTION
+  Serial.println(F("KWPReadAscii"));
+#endif
+  while (true) {
+    int size = 0;
+    char recvMessage[65];
+    if (KWPReceiveBlock(recvMessage, 64, size) != RETURN_SUCCESS) return RETURN_RECEIVE_ERROR;
+    if (size == 0) return RETURN_NULLSIZE_ERROR;
+    if (recvMessage[2] == KWP_ACK) break; //if we got an ack block then it finished sending the ascii data
+    if (recvMessage[2] != KWP_R_ASCII_DATA) { //if it's not sending ASCII
+#ifdef DEBUG_SHOW_ERRORS
+      Serial.println(F("ERROR: unexpected answer"));
+#endif
+      disconnect();
+      errorData++;
+      return RETURN_UNEXPECTEDANSWER_ERROR;
+    }
+
+    if (size == 9) {
+      uint8_t b1 = recvMessage[4] &= 0xFF,
+              b2 = recvMessage[5] &= 0xFF,
+              b3 = recvMessage[6] &= 0xFF,
+              b4 = recvMessage[7] &= 0xFF;
+
+      coding = ((b1 << 8) + ((b2 >> 4) << 4)) >> 1;
+      wsc = (((uint32_t)b2 & 0xF) << 16) + (b3 << 8) + b4;
+      break;
+    }
+    if (KWPSendAckBlock() != RETURN_SUCCESS) return RETURN_SEND_ERROR;
+  }
   return RETURN_SUCCESS;
 }
 
@@ -318,7 +347,47 @@ char KW1281_dv::connect(uint8_t address, int baud, char id[], uint16_t &coding, 
   //call the function which was defined by the user
   //usually it would contain a 1-second delay and reinitialising variables
   if_has_reset();
+
+  connected = false;
+  blockCounter = 0; //reset the sequence counter
+  currAddr = 0;
+
+  obd->begin(baud); //init SoftwareSerial
+
+  bitBang5Baud(address); //send the slow init sequence
+
+  //if the connection was successful, we should get the message 55 01 8A
+  char s[3];
+  int size = 3;
+  if (KWPReceiveBlock(s, 3, size) != RETURN_SUCCESS) return RETURN_RECEIVE_ERROR; //receive the block of 3 bytes
   
+  if ((((uint8_t)s[0]) != 0x55) || (((uint8_t)s[1]) != 0x01) || (((uint8_t)s[2]) != 0x8A)) {
+#ifdef DEBUG_SHOW_ERRORS
+    Serial.println(F("ERROR: Unexpected init response"));
+#endif
+    disconnect();
+    errorData++;
+    return RETURN_UNEXPECTEDANSWER_ERROR;
+  }
+  currAddr = address;
+  connected = true;
+  //now read the text data the control module always sends when connected
+  if (KWPReadAscii(id, coding, wsc) != RETURN_SUCCESS) return RETURN_RECEIVE_ERROR;
+  return RETURN_SUCCESS;
+}
+
+char KW1281_dv::connect(uint8_t address, int baud, uint16_t &coding, uint32_t &wsc) {
+#ifdef DEBUG_SHOW_CURRENT_FUNCTION
+  Serial.println(F("connect"));
+#endif
+#ifdef DEBUG
+  Serial.print(F("Connecting to ")); Serial.print(address, HEX); Serial.print(F(" at baud ")); Serial.println(baud);
+#endif
+
+  //call the function which was defined by the user
+  //usually it would contain a 1-second delay and reinitialising variables
+  if_has_reset();
+
   connected = false;
   blockCounter = 0; //reset the sequence counter
   currAddr = 0;
@@ -343,7 +412,7 @@ char KW1281_dv::connect(uint8_t address, int baud, char id[], uint16_t &coding, 
   currAddr = address;
   connected = true;
   //now read the text data the control module always sends when connected
-  if (KWPReadAscii(id, coding, wsc) != RETURN_SUCCESS) return RETURN_RECEIVE_ERROR;
+  if (KWPReadAscii(coding, wsc) != RETURN_SUCCESS) return RETURN_RECEIVE_ERROR;
   return RETURN_SUCCESS;
 }
 
@@ -354,6 +423,10 @@ char KW1281_dv::connect(uint8_t address, int baud) {
 #ifdef DEBUG
   Serial.print(F("Connecting to ")); Serial.print(address, HEX); Serial.print(F(" at baud ")); Serial.println(baud);
 #endif
+
+  //call the function which was defined by the user
+  //usually it would contain a 1-second delay and reinitialising variables
+  if_has_reset();
 
   connected = false;
   blockCounter = 0; //reset the sequence counter
