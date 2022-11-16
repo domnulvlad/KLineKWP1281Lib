@@ -27,7 +27,7 @@
 ## Getting started
 Download [the latest release (.zip)](https://github.com/domnulvlad/KW1281_dv/releases/latest) and [add it to your Arduino IDE](https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries#importing-a-zip-library).
 
-**Read the documentation on the wiki!**
+**Read the documentation on [the wiki](https://github.com/domnulvlad/KW1281_dv/wiki)!**
 
 After completing the hardware setup, proceed to upload the demo by navigating to `File -> Examples -> KW1281_dv -> KW1281_dv_Demo` in the Arduino IDE.
 
