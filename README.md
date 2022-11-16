@@ -13,9 +13,9 @@
 - "Adaptation" for reading an adaptation value on a specified channel
 - Testing an adaptation value on a specified channel
 - Saving an adaptation value to a specified channel
-- Ability to keep the connection alive while doing other tasks
 - "Meas. Blocks" reading for an entire Meas. Block (calculating actual value + providing proper units of measurement)
 - Reading a single value inside a Meas. Block (calculating actual value + providing proper units of measurement)
+- Ability to keep the connection alive while doing other tasks
 
 ## Currently unsupported features:
 - Reading or writing ROM / EEPROM (firmware)
