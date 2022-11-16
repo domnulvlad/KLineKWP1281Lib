@@ -58,7 +58,7 @@ char KW1281_dv::obdRead() {
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: obdRead timeout"));
 #endif
-      disconnect();
+      reset();
       errorTimeout++;
       return RETURN_TIMEOUT_ERROR;
     }
@@ -88,7 +88,7 @@ char KW1281_dv::KWPSendBlock(char *sendMessage, int sendMessageSize) {
 #ifdef DEBUG_SHOW_ERRORS
         Serial.println(F("ERROR: invalid complement"));
 #endif
-        disconnect();
+        reset();
         errorData++;
         return RETURN_COMPLEMENT_ERROR;
       }
@@ -146,7 +146,7 @@ char KW1281_dv::KWPReceiveBlock(char receivedMessage[], int maxMessageSize, int 
 #ifdef DEBUG_SHOW_ERRORS
           Serial.println(F("ERROR: invalid blockCounter"));
 #endif
-          disconnect();
+          reset();
           errorData++;
           return RETURN_BLOCKCOUNT_ERROR;
         }
@@ -164,7 +164,7 @@ char KW1281_dv::KWPReceiveBlock(char receivedMessage[], int maxMessageSize, int 
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: timeout"));
 #endif
-      disconnect();
+      reset();
       errorTimeout++;
       return RETURN_TIMEOUT_ERROR;
     }
@@ -215,7 +215,7 @@ char KW1281_dv::keepAlive() {
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: invalid answer"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -243,7 +243,7 @@ char KW1281_dv::KWPReadAscii(char id[], uint16_t &coding, uint32_t &wsc) {
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: unexpected answer"));
 #endif
-      disconnect();
+      reset();
       errorData++;
       return RETURN_UNEXPECTEDANSWER_ERROR;
     }
@@ -291,7 +291,7 @@ char KW1281_dv::KWPReadAscii(uint16_t &coding, uint32_t &wsc) {
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: unexpected answer"));
 #endif
-      disconnect();
+      reset();
       errorData++;
       return RETURN_UNEXPECTEDANSWER_ERROR;
     }
@@ -326,7 +326,7 @@ char KW1281_dv::KWPReadAscii() {
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: unexpected answer"));
 #endif
-      disconnect();
+      reset();
       errorData++;
       return RETURN_UNEXPECTEDANSWER_ERROR;
     }
@@ -365,7 +365,7 @@ char KW1281_dv::connect(uint8_t address, int baud, char id[], uint16_t &coding, 
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: Unexpected init response"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -405,7 +405,7 @@ char KW1281_dv::connect(uint8_t address, int baud, uint16_t &coding, uint32_t &w
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: Unexpected init response"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -445,7 +445,7 @@ char KW1281_dv::connect(uint8_t address, int baud) {
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: Unexpected init response"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -456,12 +456,23 @@ char KW1281_dv::connect(uint8_t address, int baud) {
   return RETURN_SUCCESS;
 }
 
+void KW1281_dv::reset() {
+#ifdef DEBUG_SHOW_CURRENT_FUNCTION
+  Serial.println(F("reset"));
+#endif
+  connected = false;
+  currAddr = 0;
+}
+
 void KW1281_dv::disconnect() {
 #ifdef DEBUG_SHOW_CURRENT_FUNCTION
   Serial.println(F("disconnect"));
 #endif
-  //we could send an actual disconnect message...
-  //but the connection automatically stops when there is no data for around 500ms
+
+  char s[4] = {0x03, 0x00, KWP_DISCONNECT, 0x03};
+  s[1] = blockCounter;
+  KWPSendBlock(s, 4);
+
   connected = false;
   currAddr = 0;
 }
@@ -487,7 +498,7 @@ char KW1281_dv::readFaults(uint16_t faults[], uint8_t startFrom, uint8_t amount)
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: invalid answer"));
 #endif
-      disconnect();
+      reset();
       errorData++;
       return RETURN_UNEXPECTEDANSWER_ERROR;
     }
@@ -539,7 +550,7 @@ char KW1281_dv::clearFaults() {
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: invalid answer"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -598,7 +609,7 @@ char KW1281_dv::Coding(uint16_t &coding, uint32_t wsc) {
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: unexpected answer"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -615,7 +626,7 @@ char KW1281_dv::Coding(uint16_t &coding, uint32_t wsc) {
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: invalid answer"));
 #endif
-      disconnect();
+      reset();
       errorData++;
       return RETURN_UNEXPECTEDANSWER_ERROR;
     }
@@ -657,7 +668,7 @@ char KW1281_dv::Coding(uint16_t &coding, uint32_t wsc) {
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: invalid answer"));
 #endif
-      disconnect();
+      reset();
       errorData++;
       return RETURN_UNEXPECTEDANSWER_ERROR;
     }
@@ -690,7 +701,7 @@ uint16_t KW1281_dv::readAdaptation(uint8_t channel) {
     Serial.print(F("ERROR: unexpected answer: "));
     Serial.println(s[2], HEX);
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -699,7 +710,7 @@ uint16_t KW1281_dv::readAdaptation(uint8_t channel) {
     Serial.print(F("ERROR: wrong response given: "));
     Serial.println(s[3], HEX);
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -733,7 +744,7 @@ uint16_t KW1281_dv::testAdaptation(uint8_t channel, uint16_t value) {
     Serial.print(F("ERROR: unexpected answer: "));
     Serial.println(s[2], HEX);
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -742,7 +753,7 @@ uint16_t KW1281_dv::testAdaptation(uint8_t channel, uint16_t value) {
     Serial.print(F("ERROR: wrong response given: "));
     Serial.println(s[3], HEX);
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -783,7 +794,7 @@ uint16_t KW1281_dv::Adaptation(uint8_t channel, uint16_t value, uint32_t wsc) {
     Serial.print(F("ERROR: unexpected answer: "));
     Serial.println(s[2], HEX);
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -792,7 +803,7 @@ uint16_t KW1281_dv::Adaptation(uint8_t channel, uint16_t value, uint32_t wsc) {
     Serial.print(F("ERROR: wrong response given: "));
     Serial.println(s[3], HEX);
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -823,7 +834,7 @@ char KW1281_dv::VIN(char vin[]) {
 #ifdef DEBUG_SHOW_ERRORS
       Serial.println(F("ERROR: unexpected answer"));
 #endif
-      disconnect();
+      reset();
       errorData++;
       return RETURN_UNEXPECTEDANSWER_ERROR;
     }
@@ -868,7 +879,7 @@ char KW1281_dv::MeasBlocks(uint8_t group, float &result1, float &result2, float 
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: unexpected answer"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -954,7 +965,7 @@ char KW1281_dv::MeasBlocksWithUnits(uint8_t group, float &result1, float &result
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: unexpected answer"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -1043,7 +1054,7 @@ char KW1281_dv::SingleReading(uint8_t group, uint8_t index, float &result) { //r
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: unexpected answer"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
@@ -1097,7 +1108,7 @@ char KW1281_dv::SingleReadingWithUnits(uint8_t group, uint8_t index, uint8_t &t,
 #ifdef DEBUG_SHOW_ERRORS
     Serial.println(F("ERROR: unexpected answer"));
 #endif
-    disconnect();
+    reset();
     errorData++;
     return RETURN_UNEXPECTEDANSWER_ERROR;
   }
