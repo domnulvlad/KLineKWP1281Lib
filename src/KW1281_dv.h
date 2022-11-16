@@ -110,6 +110,7 @@ class KW1281_dv {
     
     char obdRead();
     
+    void reset();
     char KWPSendBlock(char *sendMessage, int sendMessageSize);
     char KWPReceiveBlock(char receivedMessage[], int maxSize, int &receivedMessageSize);
     char KWPSendAckBlock();
