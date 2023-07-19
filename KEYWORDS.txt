@@ -1,55 +1,66 @@
-#######################################
-# Syntax Coloring Map For KW1281_dv
-#######################################
+##########################################
+# Syntax Coloring Map For KLineKWP1281Lib
+##########################################
 
-#######################################
+##########################################
 # Datatypes (KEYWORD1)
-#######################################
+##########################################
 
-KW1281_dv	KEYWORD1
+KLineKWP1281Lib	KEYWORD1
+EXECUTION_STATUS	KEYWORD1
+MEASUREMENT_TYPE	KEYWORD1
 
-#######################################
-# Methods and Functions (KEYWORD2)
-#######################################
+##########################################
+# Functions (KEYWORD2)
+##########################################
 
+custom5baudWaitFunction	KEYWORD2
+customErrorFunction	KEYWORD2
+
+attemptConnect	KEYWORD2
 connect	KEYWORD2
+update	KEYWORD2
 disconnect	KEYWORD2
-define_reset_function	KEYWORD2
-define_wait_5baud_function	KEYWORD2
+
+getPartNumber	KEYWORD2
+getIdentification	KEYWORD2
+getExtraIdentification	KEYWORD2
+getCoding	KEYWORD2
+getWorkshopCode	KEYWORD2
+
+login	KEYWORD2
+recode	KEYWORD2
 readFaults	KEYWORD2
 clearFaults	KEYWORD2
-VIN	KEYWORD2
-Coding	KEYWORD2
+getFaultCode	KEYWORD2
+getFaultStatusCode	KEYWORD2
 readAdaptation	KEYWORD2
 testAdaptation	KEYWORD2
-Adaptation	KEYWORD2
-MeasBlocks	KEYWORD2
-MeasBlocksWithUnits	KEYWORD2
-SingleReading	KEYWORD2
-SingleReadingWithUnits	KEYWORD2
-Login	KEYWORD2
-keepAlive	KEYWORD2
-calculateResult	KEYWORD2
-getUnits	KEYWORD2
+adapt	KEYWORD2
+basicSetting	KEYWORD2
+readGroup	KEYWORD2
+getMeasurementType	KEYWORD2
+getMeasurementValue	KEYWORD2
+getMeasurementUnits	KEYWORD2
+readROM	KEYWORD2
+outputTests	KEYWORD2
 
-#######################################
-# Constants (LITERAL1)
-#######################################
+##########################################
+# Constants/variables (LITERAL1)
+##########################################
 
-RETURN_SUCCESS	LITERAL1
-RETURN_TIMEOUT_ERROR	LITERAL1
-RETURN_COMPLEMENT_ERROR	LITERAL1
-RETURN_MAXMSGSIZE_ERROR	LITERAL1
-RETURN_BLOCKCOUNT_ERROR	LITERAL1
-RETURN_NULLSIZE_ERROR	LITERAL1
-RETURN_RECEIVE_ERROR	LITERAL1
-RETURN_SEND_ERROR	LITERAL1
-RETURN_UNEXPECTEDANSWER_ERROR	LITERAL1
-RETURN_LOGIN_ERROR	LITERAL1
-RETURN_INVALID_ERROR	LITERAL1
-FORMULA_OIL_PRESSURE	LITERAL1
-FORMULA_TIME	LITERAL1
-FORMULA_TEXT1	LITERAL1
-FORMULA_TEXT2	LITERAL1
-currAddr	LITERAL1
+FAIL	LITERAL1
+SUCCESS	LITERAL1
+ERROR	LITERAL1
 
+UNKNOWN	LITERAL1
+VALUE	LITERAL1
+UNITS	LITERAL1
+
+complementDelay	LITERAL1
+byteDelay	LITERAL1
+blockDelay	LITERAL1
+
+initResponseTimeout	LITERAL1
+complementResponseTimeout	LITERAL1
+responseTimeout	LITERAL1
