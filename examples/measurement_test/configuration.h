@@ -3,7 +3,7 @@
 #define module_baud_rate 10400
 
 //Enable/disable printing bus traffic on the Serial Monitor:
-#define has_debug true
+#define has_debug false
 
 //Select whether or not your serial interface can receive at the same time as sending (or whether or not your K-line interface has echo as it should):
 #define is_full_duplex true
