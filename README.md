@@ -1,5 +1,5 @@
 ## KLineKWP1281Lib
-**KLineKWP1281Lib** is a library used for communicating with VAG control modules which use the proprietary VAG Key-Word 1281 protocol, through an Arduino / ESP development board.
+**KLineKWP1281Lib** is a library used for communicating with VAG control modules which use the proprietary VAG Key-Word 1281 protocol (KWP1281/KW1281), through an Arduino / ESP development board.
 
 ## Supported features:
 - **Ability to use any method to send and receive data** (best being a hardware serial port, or software serial if an additional port is not available)
