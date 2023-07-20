@@ -1,19 +1,22 @@
-//Change to correspond to the target module:
-#define module 0x01
+//Select your target module address:
+#define connect_to_module 0x01
+
+//Select your target module speed:
 #define module_baud_rate 10400
 
-//Enable/disable printing bus traffic on the Serial Monitor:
+//Enable/disable printing bus traffic on the Serial Monitor.
 #define has_debug false
 
-//Select whether or not your serial interface can receive at the same time as sending (or whether or not your K-line interface has echo as it should):
+//Select whether or not your serial interface can receive at the same time as sending (or whether or not your K-line interface has echo as it should).
+//Most software serial libraries for AVR microcontrollers are half-duplex (can't receive while sending), so if using such library this should be false.
 #define is_full_duplex true
 
 //Uncomment one of the following options:
 
-//Arduino UNO (no additional hardware serial ports, must use software serial)
+//Arduino UNO (no additional hardware serial ports, must use software serial; AltSoftSerial was chosen as it is full-duplex)
 /*
   #include <AltSoftSerial.h>
-  AltSoftSerial software_serial_port;
+  AltSoftSerial software_serial_port; //pins cannot be configured
   #define K_line software_serial_port
   #define TX_pin 9
 */
@@ -38,10 +41,14 @@
   #define TX_pin 17
 */
 
-//ESP8266 can not be used with this sketch (explained in the main file)
-#ifdef ESP8266
-  #error This demo sketch is not compatible with the ESP8266!
-#endif
+//ESP8266 (no additional hardware serial ports, must use software serial)
+//You can change the RX and TX pins to any unused pin, don't forget to also change the TX_pin define below.
+/*
+  #include "SoftwareSerial.h"
+  SoftwareSerial software_serial_port(4, 5); //D2, D1
+  #define K_line software_serial_port
+  #define TX_pin 5 //D1
+*/
 
 #ifndef K_line
   #error Please select an option in configuration.h!

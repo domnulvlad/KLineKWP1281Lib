@@ -1,3 +1,4 @@
+//Include the library.
 #include <KLineKWP1281Lib.h>
 
 /*
@@ -9,7 +10,7 @@
 
   Arduino UNO
     *no additional serial port, software serial is used
-    *library of choice: AltSoftSerial
+    *library of choice: AltSoftSerial (better than SoftwareSerial because it can also receive while sending)
     *pins:
       *K-line TX -> RX pin 8
       *K-line RX -> TX pin 9
@@ -28,25 +29,30 @@
 
   ESP8266
     *has no additional serial ports
-    *cannot be used with this sketch (software serial libraries do not support the baud rates necessary, mainly 10400)
-    *can be used with sketches which display data on external hardware, by connecting the interface to the regular hardware serial
+    *library of choice: SoftwareSerial (the ESP version of SoftwareSerial can also receive while sending)
+    *pins: any unused
+      *chosen for this demo:
+        *K-line TX -> RX pin 4 (D2)
+        *K-line RX -> TX pin 5 (D1)
 
-  ***If using the first hardware serial port (Serial) (with other sketches), the interface must be disconnected during code upload.
+  ***If using the first hardware serial port (Serial) (with other sketches), the interface must be disconnected during code upload, and no "Serial.print"s
+  should be used.
 */
 
+//Include the two files containing configuration options and the functions used for communication.
 #include "configuration.h"
 #include "communication.h"
 
-//Debugging can also be enabled in configuration.h in order to also print bus activity on the Serial Monitor.
+//Debugging can be enabled in configuration.h in order to print bus activity on the Serial Monitor.
 #if has_debug
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex, &Serial);
 #else
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex);
 #endif
 
-//Increase the value below if getting "Too many faults for the given buffer size" during the DTC test.
+//You can increase the value below if you get "Too many faults for the given buffer size" during the DTC test.
 #define DTC_BUFFER_MAX_FAULT_CODES 16
-uint8_t faults[3 * DTC_BUFFER_MAX_FAULT_CODES]; //buffer to store the fault codes
+uint8_t faults[3 * DTC_BUFFER_MAX_FAULT_CODES]; //buffer to store the fault codes; each code takes 3 bytes
 
 void setup() {
   //Initialize the Serial Monitor.
@@ -55,7 +61,7 @@ void setup() {
   Serial.println("Sketch started.");
   
   //Change these according to your module, in configuration.h.
-  diag.connect(module, module_baud_rate);
+  diag.connect(connect_to_module, module_baud_rate);
   
   //Leave an empty line.
   Serial.println();
@@ -80,7 +86,7 @@ void setup() {
   #if defined(__AVR__)
     sprintf(WSC_str, "%05lu", diag.getWorkshopCode());
   #else
-    sprintf(WSC_str, "%05u", diag.getWorkshopCode());
+    sprintf(WSC_str, "%05u", diag.getWorkshopCode()); //uint32_t is not a "long" on the ESP platform
   #endif
   
   //Leave an empty line.
@@ -140,7 +146,7 @@ void showDTCs() {
 
       Serial.print(dtc_str);
       Serial.print(" - ");
-      Serial.println(dtc_status, HEX);
+      Serial.println(dtc_status);
     }
   }
   //If fault codes were not read successfully, show an error.

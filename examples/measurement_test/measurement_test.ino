@@ -1,3 +1,4 @@
+//Include the library.
 #include <KLineKWP1281Lib.h>
 
 /*
@@ -28,23 +29,31 @@
 
   ESP8266
     *has no additional serial ports
-    *cannot be used with this sketch (software serial libraries do not support the baud rates necessary, mainly 10400)
-    *can be used with sketches which display data on external hardware, by connecting the interface to the regular hardware serial
+    *library of choice: SoftwareSerial (the ESP version of SoftwareSerial can also receive while sending)
+    *pins: any unused
+      *chosen for this demo:
+        *K-line TX -> RX pin 4 (D2)
+        *K-line RX -> TX pin 5 (D1)
 
-  ***If using the first hardware serial port (Serial) (with other sketches), the interface must be disconnected during code upload.
+  ***If using the first hardware serial port (Serial) (with other sketches), the interface must be disconnected during code upload, and no "Serial.print"s
+  should be used.
+  
+  *This sketch will not fit on an Arduino UNO by default! To fix this, open the library's /src/KLineKWP1281Lib.h file in a text editor and comment out the line
+  "#define KWP1281_TEXT_TABLE_SUPPORTED" at the top, as explained in the comments.
 */
 
+//Include the two files containing configuration options and the functions used for communication.
 #include "configuration.h"
 #include "communication.h"
 
-//Debugging can also be enabled in configuration.h in order to also print bus activity on the Serial Monitor.
+//Debugging can be enabled in configuration.h in order to print bus activity on the Serial Monitor.
 #if has_debug
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex, &Serial);
 #else
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex);
 #endif
 
-uint8_t measurements[3 * 4]; //buffer to store the measurements
+uint8_t measurements[3 * 4]; //buffer to store the measurements; each measurement takes 3 bytes; one block contains 4 measurements
 
 void setup() {
   //Initialize the Serial Monitor.
@@ -53,9 +62,9 @@ void setup() {
   Serial.println("Sketch started.");
   
   //Change these according to your module, in configuration.h.
-  diag.connect(module, module_baud_rate);
+  diag.connect(connect_to_module, module_baud_rate);
   
-  //Read all groups, 001-255.
+  //Read all groups (001-255).
   for (uint8_t i = 1; i != 0; i++) {
     showMeasurements(i);
   }
@@ -65,6 +74,7 @@ void setup() {
 }
 
 void loop() {
+  
 }
 
 void showMeasurements(uint8_t block) {
