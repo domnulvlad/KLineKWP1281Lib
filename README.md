@@ -29,7 +29,7 @@ Download [the latest release (.zip)](https://github.com/domnulvlad/KLineKWP1281L
 
 **Read the documentation on [the wiki](https://github.com/domnulvlad/KLineKWP1281Lib/wiki)!**
 
-After completing the hardware setup, proceed to upload the demo by navigating to `File -> Examples -> KLineKWP1281Lib -> connection_test` in the Arduino IDE.
+After completing the hardware setup, proceed to upload the demo by navigating to `File -> Examples -> KLineKWP1281Lib -> 01.Connection_test` in the Arduino IDE.
 
 ## Credits
 Thanks go out to these people for their efforts:
