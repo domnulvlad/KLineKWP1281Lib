@@ -23,27 +23,27 @@
     receiving while sending.
   
   Callback function examples (using hardware serial port Serial1):
-    void beginFunction(unsigned long baud) {
-      Serial1.begin(baud);
-    }
-    
-    void endFunction() {
-      Serial1.end();
-    }
-    
-    void sendFunction(uint8_t data) {
-      Serial1.write(data);
-    }
-    
-    bool receiveFunction(uint8_t &data) {
-      if (Serial1.available()) {
-        data = KLine.read();
-        return true;
-      }
-      return false;
-    }
+    ||void beginFunction(unsigned long baud) {
+    ||  Serial1.begin(baud);
+    ||}
+    ||
+    ||void endFunction() {
+    ||  Serial1.end();
+    ||}
+    ||
+    ||void sendFunction(uint8_t data) {
+    ||  Serial1.write(data);
+    ||}
+    ||
+    ||bool receiveFunction(uint8_t &data) {
+    ||  if (Serial1.available()) {
+    ||    data = KLine.read();
+    ||    return true;
+    ||  }
+    ||  return false;
+    ||}
 */
-KLineKWP1281Lib::KLineKWP1281Lib(beginFunction_type beginFunction, endFunction_type endFunction, sendFunction_type sendFunction, receiveFunction_type receiveFunction, uint8_t tx_pin, bool full_duplex, HardwareSerial* debug_port) :
+KLineKWP1281Lib::KLineKWP1281Lib(beginFunction_type beginFunction, endFunction_type endFunction, sendFunction_type sendFunction, receiveFunction_type receiveFunction, uint8_t tx_pin, bool full_duplex, Stream* debug_port) :
   //Use the initializer list to set the private variables.
   _beginFunction    (beginFunction),
   _endFunction      (endFunction),
@@ -53,6 +53,60 @@ KLineKWP1281Lib::KLineKWP1281Lib(beginFunction_type beginFunction, endFunction_t
   _full_duplex      (full_duplex),
   _debug_port       (debug_port)
 {}
+
+/**
+  Function:
+    KWP1281debugFunction(KWP1281debugFunction_type debug_function)
+  
+  Parameters:
+    debug_function -> function to execute after receiving a KWP1281 message, to show it
+  
+  Description:
+    Attaches a function to be called for debugging KWP1281 messages.
+    
+  Notes:
+    *The function given here must return void and take the following parameters in the following order:
+      - bool type        -> true for inbound frames (received), false for outbound (sent)
+      - uint8_t sequence -> message sequence
+      - uint8_t command  -> message type
+      - uint8_t* data    -> message parameters (uint8_t pointer = byte array)
+      - uint16_t length  -> amount of message parameters (amount of bytes in the data array)
+    
+    *For example, the function may be defined as such:
+      ||void KWP1281debugFunction(bool type, uint8_t sequence, uint8_t command, uint8_t* data, uint8_t length) {
+      ||  Serial.println();
+      ||
+      ||  Serial.println(type ? "RECEIVE:" : "SEND:");
+      ||  
+      ||  Serial.print("*command: ");
+      ||  if (command < 0x10) Serial.print(0);
+      ||  Serial.println(command, HEX);
+      ||  
+      ||  Serial.print("*sequence: ");
+      ||  if (sequence < 0x10) Serial.print(0);
+      ||  Serial.println(sequence, HEX);
+      ||  
+      ||  if (length) {
+      ||    Serial.print("*data bytes: ");
+      ||    Serial.println(length);
+      ||  
+      ||    Serial.print("*data: ");
+      ||    for (uint16_t i = 0; i < length; i++) { //iterate through the message's contents
+      ||      if (data[i] < 0x10) Serial.print(0);  //print a leading 0 where necessary to display 2-digit HEX
+      ||      Serial.print(data[i], HEX);           //print the byte in HEX
+      ||      Serial.print(' ');
+      ||    }
+      ||    Serial.println();
+      ||  }
+      ||}
+    
+    *Then, it will be attached like:
+      ||instanceName.KWP1281debugFunction(KWP1281debugFunction);
+*/
+void KLineKWP1281Lib::KWP1281debugFunction(KWP1281debugFunction_type debug_function)
+{
+  _debugFunction = debug_function;
+}
 
 /**
   Function:
@@ -102,7 +156,7 @@ void KLineKWP1281Lib::customErrorFunction(callBack_type function)
     baud_rate -> communication speed (10400, 9600, 4800 etc.)
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -115,7 +169,7 @@ void KLineKWP1281Lib::customErrorFunction(callBack_type function)
     *If a blocking delay of one second (if the connection fails) is not a problem, use connect(), which will run until successful.
     *To run custom code if a connection attempt fails, use attemptConnect() and check its return value.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::attemptConnect(uint8_t module, unsigned long baud_rate)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::attemptConnect(uint8_t module, unsigned long baud_rate)
 {
   //If there is a module connected, disconnect from it first.
   if (_current_module) {
@@ -142,7 +196,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::attemptConnect(uint8_t module
   if (_receive_byte == 0x55) {
     #ifdef KWP1281_DEBUG_SUPPORTED
       if (_debug_port) {
-        _debug_port->println(F("Got protocol parameters"));
+        _debug_port->println(F("Got sync byte"));
       }
     #endif
     
@@ -152,8 +206,8 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::attemptConnect(uint8_t module
       return ERROR;
     }
     
-    //Send a complement to the last byte after a small delay.
-    delay(10);
+    //Send a complement to the last byte after a delay.
+    delay(initComplementDelay);
     send_complement(_parameter_buffer[1]);
     
     //Determine the protocol.
@@ -261,6 +315,8 @@ void KLineKWP1281Lib::disconnect()
   //Indicate that there is no module connected anymore, so the following read will not trigger the error function if it times out.
   _current_module = 0;
   
+  show_debug_info(DISCONNECT_INFO);
+  
   //Some modules may send a "refuse" block, don't leave it un-complemented.
   receive(_receive_buffer, sizeof(_receive_buffer));
   
@@ -357,7 +413,7 @@ uint32_t KLineKWP1281Lib::getWorkshopCode()
     workshop_code -> the CURRENT workshop code
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -365,7 +421,7 @@ uint32_t KLineKWP1281Lib::getWorkshopCode()
   Description:
     Performs a login operation.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::login(uint16_t login_code, uint32_t workshop_code)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::login(uint16_t login_code, uint32_t workshop_code)
 {
   uint8_t login_code_high_byte = login_code >> 8;
   uint8_t login_code_low_byte = login_code & 0xFF;
@@ -407,7 +463,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::login(uint16_t login_code, ui
     workshop_code = 0 (00000)
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -418,7 +474,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::login(uint16_t login_code, ui
   Notes:
     *The new workshop code may only be applied if currently logged in with the previous code.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::recode(uint16_t coding, uint32_t workshop_code)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::recode(uint16_t coding, uint32_t workshop_code)
 {
   //The coding value is shifted left by 1.
   coding <<= 1;
@@ -448,7 +504,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::recode(uint16_t coding, uint3
     fault_code_buffer_size -> total (maximum) length of the given array
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -457,29 +513,51 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::recode(uint16_t coding, uint3
     Reads the module's fault codes.
   
   Notes:
-    *The DTCs are stored in the following order: DTC_H, DTC_L, DTC_STATUS.
-    *The functions getFaultCode() and getFaultStatusCode() can be used to easily get the fault+status codes stored in the buffer by readFaults().
-    *getFaultCode() and getFaultStatusCode() are static functions so they do not require an instance to be used (useful in multi-instance applications).
+    *The DTCs are stored in the following order: DTC_H, DTC_L, DTC_ELABORATION.
+    *The functions getFaultCode() and getFaultElaborationCode() can be used to easily get the fault+elaboration codes stored in the buffer by readFaults().
+    *getFaultCode() and getFaultElaborationCode() are static functions so they do not require an instance to be used (useful in multi-instance applications).
     
-    *A possible implementation for displaying all fault+status codes, after the buffer is filled by readFaults(), would be:
+    *A possible implementation for displaying all fault+elaboration codes, after the buffer is filled by readFaults(), would be:
       ||//Navigate the list of fault codes.
       ||for (uint8_t i = 0; i < amount_of_fault_codes; i++) {
-      ||  //Get the "i"-th fault code and status code from the buffer.
+      ||  //Get the "i"-th fault code and elaboration code from the buffer.
       ||  //The "buffer" parameter represents the same array that was given to readFaults().
       ||  uint16_t DTC = KLineKWP1281Lib::getFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer));
-      ||  uint8_t DTC_STATUS = KLineKWP1281Lib::getFaultStatusCode(i, amount_of_fault_codes, buffer, sizeof(buffer));
+      ||  uint8_t DTC_elaboration = KLineKWP1281Lib::getFaultElaborationCode(i, amount_of_fault_codes, buffer, sizeof(buffer));
       ||  
       ||  //Declare a character array and use it to store the fault code.
       ||  char DTC_string[8];
-      ||  sprintf(DTC_string, "%05d", dtc); //pad with zeroes to reach 5 characters
+      ||  sprintf(DTC_string, "%05d", DTC); //pad with zeroes to reach 5 characters
+      ||
+      ||  //Declare a character array and use it to store the elaboration code.
+      ||  char DTC_elaboration_string[8];
+      ||  sprintf(DTC_elaboration_string, "%02d", DTC_elaboration); //pad with zeroes to reach 2 characters
       ||  
-      ||  //Print the fault and status code.
+      ||  //Print the fault and elaboration code.
       ||  Serial.print(DTC_string);
       ||  Serial.print(" - ");
-      ||  Serial.println(dtc_status);
+      ||  Serial.println(DTC_elaboration_string);
+      ||
+      ||  //Declare a character array and use it to store the elaboration string.
+      ||  char elaboration_string[32];
+      ||  
+      ||  //Declare a bool that indicates whether or not the fault is intermittent.
+      ||  bool is_intermittent;
+      ||  
+      ||  //Get the elaboration string.
+      ||  KLineKWP1281Lib::getFaultElaboration(is_intermittent, i, amount_of_fault_codes, buffer, sizeof(buffer), elaboration_string, sizeof(elaboration_string));
+      ||  
+      ||  //Print the elaboration.
+      ||  Serial.print(elaboration_string);
+      ||
+      ||  if (is_intermittent) {
+      ||    Serial.print(" - Intermittent");
+      ||  }
+      ||  
+      ||  Serial.println();
       ||}
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
   if (!send(KWP_REQUEST_FAULT_CODES)) {
     show_debug_info(SEND_ERROR);
@@ -508,7 +586,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readFaults(uint8_t &amount_of
         //Determine how many fault codes have just been received.
         fault_codes_in_current_block = _receive_buffer[0] / 3;
         
-        //A single stored DTC, with code 0xFFFF and status 0x88, means no DTCs present.
+        //A single stored DTC, with code 0xFFFF and elaboration 0x88, means no DTCs present.
         if (fault_codes_in_current_block == 1) {
           if (_receive_buffer[1] == 0xFF && _receive_buffer[2] == 0xFF) {
             if (_receive_buffer[3] == 0x88) {
@@ -588,24 +666,24 @@ uint16_t KLineKWP1281Lib::getFaultCode(uint8_t fault_code_index, uint8_t amount_
 
 /**
   Function:
-    getFaultStatusCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size)
+    getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size)
   
   Parameters:
-    fault_code_index       -> index of the fault code whose status needs to be retrieved
+    fault_code_index       -> index of the fault code whose elaboration code needs to be retrieved
     amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
     fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
     fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
-    uint8_t -> fault status code
+    uint8_t -> fault elaboration code
   
   Description:
-    Provides a fault status code from a buffer filled by readFaults().
+    Provides a fault elaboration code from a buffer filled by readFaults().
   
   Notes:
     *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
 */
-uint8_t KLineKWP1281Lib::getFaultStatusCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+uint8_t KLineKWP1281Lib::getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
   //Check if the array is large enough to contain as many fault codes as "declared" by the value given.
   if (fault_code_buffer_size < amount_of_fault_codes * 3) {
@@ -617,8 +695,75 @@ uint8_t KLineKWP1281Lib::getFaultStatusCode(uint8_t fault_code_index, uint8_t am
     return 0;
   }
   
-  //Return the status code.
+  //Return the elaboration code.
   return fault_code_buffer[3 * fault_code_index + 2];
+}
+
+
+/**
+  Function:
+    getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+  
+  Parameters:
+    is_intermittent        -> whether or not the elaboration code indicated that the fault is "Intermittent"
+    fault_code_index       -> index of the fault code whose elaboration needs to be retrieved
+    amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
+    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
+    str[]                  -> string (character array) into which to copy the elaboration string
+    string_size            -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    char* -> the same character array provided (str), to be able to use it like "Serial.println(getFaultElaboration(...))"
+  
+  Description:
+    Provides a fault elaboration string from a buffer filled by readFaults().
+  
+  Notes:
+    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+*/
+char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+{
+  //Determine the elaboration code.
+  uint8_t elaboration_code = getFaultElaborationCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+  
+  //The fault is considered "Intermittent" if the highest bit in the elaboration code is set.
+  is_intermittent = elaboration_code & 0x80;
+  
+  //Ensure the high bit is not set.
+  elaboration_code &= ~0x80;
+  
+  //If the feature is enabled, copy the elaboration into the given string.
+#ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
+  //If the elaboration code is valid, copy its string into the given array.
+  if (elaboration_code < (sizeof(fault_elaborations) / sizeof(fault_elaborations[0]))) {
+    //Copy the elaboration string into the given array.
+    strncpy_P(str, (const char*)READ_POINTER_FROM_PROGMEM(fault_elaborations + elaboration_code), string_size);
+    
+    //Ensure the string is null-terminated.
+    if (string_size) {
+      str[string_size - 1] = '\0';
+    }
+  }
+  
+  //Otherwise, clear the string by writing a null on the first position.
+  else {
+    if (string_size) {
+      str[0] = '\0';
+    }
+  }
+#else
+  //Otherwise, copy the "warning" into the given string.
+  strncpy(str, "EN_elb", string_size);
+  
+  //Ensure the string is null-terminated.
+  if (string_size) {
+    str[string_size - 1] = '\0';
+  }
+#endif
+  
+  //Return a pointer to the given array.
+  return str;
 }
 
 /**
@@ -626,7 +771,7 @@ uint8_t KLineKWP1281Lib::getFaultStatusCode(uint8_t fault_code_index, uint8_t am
     clearFaults()
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -637,7 +782,7 @@ uint8_t KLineKWP1281Lib::getFaultStatusCode(uint8_t fault_code_index, uint8_t am
   Notes:
     *Run readFaults() afterwards to check if it was effective.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::clearFaults()
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::clearFaults()
 {
   if (!send(KWP_REQUEST_CLEAR_FAULTS)) {
     show_debug_info(SEND_ERROR);
@@ -668,7 +813,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::clearFaults()
     &value -> will store the value read from the channel
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -676,7 +821,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::clearFaults()
   Description:
     Reads the value of an adaptation channel.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readAdaptation(uint8_t channel, uint16_t &value)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readAdaptation(uint8_t channel, uint16_t &value)
 {
   uint8_t parameters[] = {channel};
   if (!send(KWP_REQUEST_ADAPTATION, parameters, sizeof(parameters))) {
@@ -711,7 +856,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readAdaptation(uint8_t channe
     value -> value to test
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -719,7 +864,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readAdaptation(uint8_t channe
   Description:
     Tests whether or not a value would work for an adaptation channel.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::testAdaptation(uint8_t channel, uint16_t value)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::testAdaptation(uint8_t channel, uint16_t value)
 {
   uint8_t value_high_byte = value >> 8;
   uint8_t value_low_byte = value & 0xFF;
@@ -762,7 +907,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::testAdaptation(uint8_t channe
     workshop_code -> WSC to use
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -773,7 +918,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::testAdaptation(uint8_t channe
   Notes:
     *Use testAdaptation() before adapt(), to ensure it's possible to use the value on the channel.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::adapt(uint8_t channel, uint16_t value, uint32_t workshop_code)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::adapt(uint8_t channel, uint16_t value, uint32_t workshop_code)
 {
   uint8_t value_high_byte = value >> 8;
   uint8_t value_low_byte = value & 0xFF;
@@ -813,7 +958,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::adapt(uint8_t channel, uint16
     basic_setting_buffer_size -> total (maximum) length of the given array
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -821,7 +966,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::adapt(uint8_t channel, uint16
   Description:
     Performs a basic setting.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::basicSetting(uint8_t group, uint8_t* basic_setting_buffer, size_t basic_setting_buffer_size)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t group, uint8_t* basic_setting_buffer, size_t basic_setting_buffer_size)
 {
   uint8_t parameters[] = {group};
   if (!send(KWP_REQUEST_BASIC_SETTING, parameters, sizeof(parameters))) {
@@ -859,7 +1004,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::basicSetting(uint8_t group, u
     measurement_buffer_size -> total (maximum) length of the given array
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -901,7 +1046,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::basicSetting(uint8_t group, u
       ||  }
       ||}
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
   uint8_t parameters[] = {group};
   if (!send(KWP_REQUEST_GROUP_READING, parameters, sizeof(parameters))) {
@@ -952,7 +1097,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readGroup(uint8_t &amount_of_
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
-    MEASUREMENT_TYPE ->
+    measurementType ->
       UNKNOWN - requested measurement outside range
       VALUE   - the value is significant (measurement has value+units)
       UNITS   - the units are significant (human-readable text is contained in the units string)
@@ -964,8 +1109,9 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readGroup(uint8_t &amount_of_
     *Even if the measurement is of type UNITS, its value still contains the "origin" of the units string, like a code or 16-bit value so it can be used without
     necessarily checking the units string.
     *For example, for a clock measurement, the units string will contain "hh:mm", but the value will also be hh.mm (hours before decimal, minutes after).
+    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
 */
-KLineKWP1281Lib::MEASUREMENT_TYPE KLineKWP1281Lib::getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
+KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
   //Check if the array is large enough to contain as many measurements as "declared" by the value given.
   if (measurement_buffer_size < amount_of_measurements * 3) {
@@ -982,14 +1128,18 @@ KLineKWP1281Lib::MEASUREMENT_TYPE KLineKWP1281Lib::getMeasurementType(uint8_t me
   
   //Only a few measurement formulas are of the "UNITS" type.
   switch (formula) {
+    case 0x0A:
     case 0x10:
     case 0x11:
+    case 0x1D:
     case 0x25:
     case 0x2C:
+    case 0x6B:
     case 0x7B:
     case 0x7F:
     case 0x88:
     case 0x8E:
+    case 0xA1:
       return UNITS;
     
     default:
@@ -1012,6 +1162,9 @@ KLineKWP1281Lib::MEASUREMENT_TYPE KLineKWP1281Lib::getMeasurementType(uint8_t me
   
   Description:
     Calculates the actual value of a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
 */
 float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
@@ -1245,6 +1398,9 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
   
   Description:
     Provides a string containing the proper units for a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
 */
 char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size)
 {
@@ -1566,6 +1722,14 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       unit_pointer = KWP_units_Distance;
       break;
     
+    case 0x6B:
+      snprintf(str, string_size, "%02X %02X", a, b);
+      
+      if (string_size) {
+        str[string_size - 1] = '\0';
+      }
+      return str;
+    
     case 0x73:
       unit_pointer = KWP_units_Power;
       break;
@@ -1580,8 +1744,16 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       break;
     
     case 0x83:
-      unit_pointer = (abs(a * b / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
+      unit_pointer = ((a * b / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
       break;
+    
+    case 0xA1:
+      snprintf(str, string_size, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(a), BYTE_TO_BINARY(b));
+      
+      if (string_size) {
+        str[string_size - 1] = '\0';
+      }
+      return str;
     
     case 0xA7:
       unit_pointer = KWP_units_Resistance_m;
@@ -1643,7 +1815,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
             str[string_size - 1] = '\0';
           }
         #else
-          strncpy(str, "ENA25!", string_size);
+          strncpy(str, "EN_f25", string_size);
           
           if (string_size) {
             str[string_size - 1] = '\0';
@@ -1654,7 +1826,8 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     
     //Date
     case 0x7F:
-      snprintf(str, string_size, "%04d:%02d:%02d", 2000 + (b & 0x7F), ((a & 0x07) << 1) | ((b & 0x80) >> 7), (a & 0xF8) >> 3);
+      snprintf(str, string_size, "%04d.%02d.%02d", 2000 + (b & 0x7F), ((a & 0x07) << 1) | ((b & 0x80) >> 7), (a & 0xF8) >> 3);
+      
       if (string_size) {
         str[string_size - 1] = '\0';
       }
@@ -1685,7 +1858,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     memory_buffer_size -> total (maximum) length of the given array
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -1698,7 +1871,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     *After the first byte, the bytes of memory are stored.
     *It is possible to call the function without parameters, for debugging purposes (nothing will be stored anywhere).
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readROM(uint8_t chunk_size, uint16_t start_address, uint8_t* memory_buffer, uint8_t memory_buffer_size)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readROM(uint8_t chunk_size, uint16_t start_address, uint8_t* memory_buffer, uint8_t memory_buffer_size)
 {
   uint8_t start_address_high_byte = start_address >> 8;
   uint8_t start_address_low_byte = start_address & 0xFF;
@@ -1733,7 +1906,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readROM(uint8_t chunk_size, u
     &returned_ID -> will contain the currently running output test ID
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -1746,7 +1919,7 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::readROM(uint8_t chunk_size, u
     *To go through them all, use multiple calls of outputTests() until FAIL is returned.
     *The currently running test ID is stored in the variable passed by reference.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::outputTests(uint16_t &returned_ID)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::outputTests(uint16_t &returned_ID)
 {
   uint8_t parameters[] = {0x00};
   send(KWP_REQUEST_OUTPUT_TEST, parameters, sizeof(parameters));
@@ -1860,7 +2033,7 @@ void KLineKWP1281Lib::bitbang_5baud(uint8_t module)
     read_identification()
   
   Returns:
-    EXECUTION_STATUS -> whether or not the operation executed successfully
+    executionStatus -> whether or not the operation executed successfully
       *SUCCESS
       *FAIL
       *ERROR
@@ -1868,7 +2041,7 @@ void KLineKWP1281Lib::bitbang_5baud(uint8_t module)
   Description:
     Receives the module's identification and stores it in the private struct's strings.
 */
-KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::read_identification()
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
 {
   bool extra_info_available = false;
   uint8_t string_length;
@@ -1989,7 +2162,6 @@ KLineKWP1281Lib::EXECUTION_STATUS KLineKWP1281Lib::read_identification()
   }
   //A control module may send a coding+WSC field with a data length of 1 instead of 5, which means coding is not supported, or may send an acknowledgement.
   else {
-    show_debug_info(INV_MSG_LEN);
     identification_data.coding = identification_data.workshop_code = 0;
   }
   
@@ -2185,14 +2357,6 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::read_byte(uint8_t &_byte, bool com
     //Send the complement after a small delay.
     delay(complementDelay);
     send_complement(_byte);
-    
-    #ifdef KWP1281_DEBUG_SUPPORTED
-      if (_debug_port) {
-        if (_byte < 0x10) _debug_port->print(0);
-        _debug_port->print(_byte, HEX);
-        _debug_port->print(F(" "));
-      }
-    #endif
   }
   
   //Done reading the byte.
@@ -2266,7 +2430,7 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
     if (_receive_byte == 0x55 && _may_send_protocol_parameters_again) {
       #ifdef KWP1281_DEBUG_SUPPORTED
         if (_debug_port) {
-          _debug_port->println(F("Got protocol parameters again"));
+          _debug_port->println(F("Got sync byte again"));
         }
       #endif
       
@@ -2276,8 +2440,8 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
         break;
       }
       
-      //Send a complement to the second byte after a small delay.
-      delay(10);
+      //Send a complement to the second byte after a delay.
+      delay(initComplementDelay);
       send_complement(_parameter_buffer[1]);
       
       //uint16_t protocol = ((_parameter_buffer[1] & 0x7F) << 7) | _parameter_buffer[0];
@@ -2291,32 +2455,12 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
     }
   }
   
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      _debug_port->print(F("\nRECEIVE: "));
-      _debug_port->println();
-      
-      _debug_port->print(F("*length: "));
-      _debug_port->print(_receive_byte);
-    }
-  #endif
-  
   //The block length was received, complement it manually.
   delay(complementDelay);
   send_complement(_receive_byte);
   
   //Determine how much data the message will contain (length without the block title, the sequence, and the end byte).
   uint8_t data_bytes = _receive_byte - 3;
-  
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      if (data_bytes) {
-        _debug_port->print(F(" (data bytes: "));
-        _debug_port->print(data_bytes);
-        _debug_port->print(F(")"));
-      }
-    }
-  #endif
   
   //If the given buffer has a size of at least one byte, store the message size on the first position.
   if (buffer_size) {
@@ -2330,22 +2474,10 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
     show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
   }
   
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      _debug_port->print(F("\n*sequence: "));
-    }
-  #endif
-  
   //Try to receive the block's sequence number, or exit if receiving times out.
   if (read_byte(_sequence) == ERROR_TIMEOUT) {
     return ERROR_TIMEOUT;
   }
-  
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      _debug_port->print(F("\n*command: "));
-    }
-  #endif
   
   //Try to receive the block's title (message type), or exit if receiving times out.
   uint8_t command;
@@ -2353,21 +2485,8 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
     return ERROR_TIMEOUT;
   }
   
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      _debug_port->print(F("("));
-      show_command_description(command);
-      _debug_port->print(F(")"));
-    }
-  #endif
-  
   //If the block contains data bytes, attempt to read them.
   if (data_bytes) {
-    #ifdef KWP1281_DEBUG_SUPPORTED
-      if (_debug_port) {
-        _debug_port->print(F("\n*data: "));
-      }
-    #endif
     
     //Attempt to read each data byte.
     for (uint8_t i = 0; i < data_bytes; i++) {
@@ -2388,9 +2507,14 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
     return ERROR_TIMEOUT;
   }
   
+  if (_debugFunction) {
+    _debugFunction(1, _sequence, command, buffer + 1, data_bytes);
+  }
+  
   #ifdef KWP1281_DEBUG_SUPPORTED
     if (_debug_port) {
-      _debug_port->println();
+      _debug_port->print(F("Info: received "));
+      show_command_description(command);
     }
   #endif
   
@@ -2480,17 +2604,7 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::send_byte(uint8_t _byte, bool wait
     while (!_receiveFunction(dummy));
   }
   
-  if (wait_for_complement) {
-    #ifdef KWP1281_DEBUG_SUPPORTED
-      if (_debug_port) {
-        if (_byte < 0x10) {
-          _debug_port->print(0);
-        }
-        _debug_port->print(_byte, HEX);
-        _debug_port->print(F(" "));
-      }
-    #endif
-    
+  if (wait_for_complement) {    
     _timeout = complementResponseTimeout;
   
     uint8_t complement;
@@ -2534,60 +2648,21 @@ bool KLineKWP1281Lib::send(uint8_t command, uint8_t* parameters, uint8_t paramet
     delay(byte_delay_adjusted);
   }
   
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      _debug_port->println(F("\nSEND: "));
-      _debug_port->print(F("*length: "));
-    }
-  #endif
-  
   uint8_t block_size = 3 + parameter_count; //the block size includes the sequence counter, the command byte, the parameter bytes and the final byte
     
   if (send_byte(block_size) == ERROR_TIMEOUT) {
     return false;
   }
   
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      if (parameter_count) {
-        _debug_port->print(F("(data bytes: "));
-        _debug_port->print(parameter_count);
-        _debug_port->print(F(")"));
-      }
-      
-      _debug_port->print(F("\n*sequence: "));
-    }
-  #endif
-  
   if (send_byte(++_sequence) == ERROR_TIMEOUT) { //send the sequence number and also increment it
     return false;
   }
-  
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      _debug_port->print(F("\n*command: "));
-    }
-  #endif
   
   if (send_byte(command) == ERROR_TIMEOUT) {
     return false;
   }
   
-  #ifdef KWP1281_DEBUG_SUPPORTED
-    if (_debug_port) {
-      _debug_port->print(F("("));
-      show_command_description(command);
-      _debug_port->print(F(")"));
-    }
-  #endif
-  
-  if (parameters) {
-    #ifdef KWP1281_DEBUG_SUPPORTED
-      if (_debug_port) {
-        _debug_port->print(F("\n*data: "));
-      }
-    #endif
-    
+  if (parameters) {    
     for (uint8_t i = 0; i < parameter_count; i++) { //send each byte in the array
       if (send_byte(parameters[i]) == ERROR_TIMEOUT) {
         return false;
@@ -2596,10 +2671,15 @@ bool KLineKWP1281Lib::send(uint8_t command, uint8_t* parameters, uint8_t paramet
   }
   
   send_byte(0x03, false); //send the constant final byte and do not wait to receive a complement
+    
+  if (_debugFunction) {
+    _debugFunction(0, _sequence, command, parameters, parameter_count);
+  }
   
   #ifdef KWP1281_DEBUG_SUPPORTED
     if (_debug_port) {
-      _debug_port->println();
+      _debug_port->print(F("Info: sent "));
+      show_command_description(command);
     }
   #endif
   
@@ -2800,10 +2880,6 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type)
           _debug_port->println(F("Info: received coding/WSC"));
           break;
         
-        case INV_MSG_LEN:
-          _debug_port->println(F("Error: invalid coding/WSC message length"));
-          break;
-        
         case EXTRA_ID_AVAILABLE:
           _debug_port->println(F("Info: extra identification available"));
           break;
@@ -2847,6 +2923,10 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type)
         case END_OF_OUTPUT_TESTS:
           _debug_port->println(F("Info: end of output tests"));
           break;
+        
+        case DISCONNECT_INFO:
+          _debug_port->println(F("Info: a \"timed out\" error is normal here"));
+          break;
       }
     }
   #else
@@ -2872,99 +2952,99 @@ void KLineKWP1281Lib::show_command_description(uint8_t command)
         ///SPECIAL
         
         case KWP_ACKNOWLEDGE:
-          _debug_port->print(F("Acknowledgement"));
+          _debug_port->println(F("\"Acknowledgement\""));
           break;
         
         case KWP_REFUSE:
-          _debug_port->print(F("Refuse"));
+          _debug_port->println(F("\"Refuse\""));
           break;
         
         case KWP_DISCONNECT:
-          _debug_port->print(F("Disconnect"));
+          _debug_port->println(F("\"Disconnect\""));
           break;
           
         ///SENT
         
         case KWP_REQUEST_EXTRA_ID:
-          _debug_port->print(F("Request extra identification"));
+          _debug_port->println(F("\"Request extra identification\""));
           break;
         
         case KWP_REQUEST_LOGIN:
-          _debug_port->print(F("Login"));
+          _debug_port->println(F("\"Login\""));
           break;
         
         case KWP_REQUEST_RECODE:
-          _debug_port->print(F("Recode"));
+          _debug_port->println(F("\"Recode\""));
           break;
         
         case KWP_REQUEST_FAULT_CODES:
-          _debug_port->print(F("Request fault codes"));
+          _debug_port->println(F("\"Request fault codes\""));
           break;
         
         case KWP_REQUEST_CLEAR_FAULTS:
-          _debug_port->print(F("Clear fault codes"));
+          _debug_port->println(F("\"Clear fault codes\""));
           break;
         
         case KWP_REQUEST_ADAPTATION:
-          _debug_port->print(F("Request adaptation value"));
+          _debug_port->println(F("\"Request adaptation value\""));
           break;
         
         case KWP_REQUEST_ADAPTATION_TEST:
-          _debug_port->print(F("Test adaptation value"));
+          _debug_port->println(F("\"Test adaptation value\""));
           break;
         
         case KWP_REQUEST_ADAPTATION_SAVE:
-          _debug_port->print(F("Save adaptation value"));
+          _debug_port->println(F("\"Save adaptation value\""));
           break;
         
         case KWP_REQUEST_BASIC_SETTING:
-          _debug_port->print(F("Request basic setting"));
+          _debug_port->println(F("\"Request basic setting\""));
           break;
         
         case KWP_REQUEST_GROUP_READING:
-          _debug_port->print(F("Request group reading"));
+          _debug_port->println(F("\"Request group reading\""));
           break;
         
         case KWP_REQUEST_READ_ROM:
-          _debug_port->print(F("Request ROM reading"));
+          _debug_port->println(F("\"Request ROM reading\""));
           break;
         
         case KWP_REQUEST_OUTPUT_TEST:
-          _debug_port->print(F("Request output test"));
+          _debug_port->println(F("\"Request output test\""));
           break;
           
         ///RECEIVED
         
         case KWP_RECEIVE_ID_DATA:
-          _debug_port->print(F("Provide identification"));
+          _debug_port->println(F("\"Provide identification\""));
           break;
         
         case KWP_RECEIVE_FAULT_CODES:
-          _debug_port->print(F("Provide fault codes"));
+          _debug_port->println(F("\"Provide fault codes\""));
           break;
         
         case KWP_RECEIVE_ADAPTATION:
-          _debug_port->print(F("Provide adaptation value"));
+          _debug_port->println(F("\"Provide adaptation value\""));
           break;
         
         case KWP_RECEIVE_BASIC_SETTING:
-          _debug_port->print(F("Provide basic setting"));
+          _debug_port->println(F("\"Provide basic setting\""));
           break;
         
         case KWP_RECEIVE_GROUP_READING:
-          _debug_port->print(F("Provide group reading"));
+          _debug_port->println(F("\"Provide group reading\""));
           break;
         
         case KWP_RECEIVE_ROM:
-          _debug_port->print(F("Provide ROM reading"));
+          _debug_port->println(F("\"Provide ROM reading\""));
           break;
         
         case KWP_RECEIVE_OUTPUT_TEST:
-          _debug_port->print(F("Execute output test"));
+          _debug_port->println(F("\"Execute output test\""));
           break;
         
         default:
-          _debug_port->print(F("Unknown"));
+          _debug_port->println(F("\"Unknown\""));
           break;
       }
     }

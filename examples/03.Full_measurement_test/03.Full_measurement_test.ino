@@ -1,5 +1,13 @@
-//Include the library.
-#include <KLineKWP1281Lib.h>
+/*
+  Title:
+    03.Full_measurement_test.ino
+
+  Description:
+    Demonstrates how to read a module's measurement blocks.
+
+  Notes:
+    *Measurement blocks 1-255 will be read, after which the connection will be stopped.
+*/
 
 /*
   *This sketch displays information in the Serial Monitor, so another serial port is required for the K-line.
@@ -10,7 +18,7 @@
 
   Arduino UNO
     *no additional serial port, software serial is used
-    *library of choice: AltSoftSerial
+    *library of choice: AltSoftSerial (better than SoftwareSerial because it can also receive while sending)
     *pins:
       *K-line TX -> RX pin 8
       *K-line RX -> TX pin 9
@@ -42,15 +50,48 @@
   "#define KWP1281_TEXT_TABLE_SUPPORTED" at the top, as explained in the comments.
 */
 
+//Include the library.
+#include <KLineKWP1281Lib.h>
+
 //Include the two files containing configuration options and the functions used for communication.
 #include "configuration.h"
 #include "communication.h"
 
-//Debugging can be enabled in configuration.h in order to print bus activity on the Serial Monitor.
-#if has_debug
+//Debugging can be enabled in configuration.h in order to print connection-related info on the Serial Monitor.
+#if debug_info
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex, &Serial);
 #else
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex);
+#endif
+
+//Debugging can be enabled in configuration.h in order to print bus traffic on the Serial Monitor.
+#if debug_traffic
+void KWP1281debugFunction(bool type, uint8_t sequence, uint8_t command, uint8_t* data, uint8_t length) {
+  Serial.println();
+  
+  Serial.println(type ? "RECEIVE:" : "SEND:");
+
+  Serial.print("*command: ");
+  if (command < 0x10) Serial.print(0);
+  Serial.println(command, HEX);
+
+  Serial.print("*sequence: ");
+  if (sequence < 0x10) Serial.print(0);
+  Serial.println(sequence, HEX);
+
+  if (length) {
+    Serial.print("*data bytes: ");
+    Serial.println(length);
+
+    Serial.print("*data: ");
+    for (uint16_t i = 0; i < length; i++) { //iterate through the message's contents
+      if (data[i] < 0x10) Serial.print(0);  //print a leading 0 where necessary to display 2-digit HEX
+      Serial.print(data[i], HEX);           //print the byte in HEX
+      Serial.print(' ');
+    }
+    Serial.println();
+  }
+}
 #endif
 
 uint8_t measurements[3 * 4]; //buffer to store the measurements; each measurement takes 3 bytes; one block contains 4 measurements
@@ -60,6 +101,11 @@ void setup() {
   Serial.begin(115200);
   delay(500);
   Serial.println("Sketch started.");
+  
+  //If debugging bus traffic was enabled, attach the debugging function.
+#if debug_traffic
+  diag.KWP1281debugFunction(KWP1281debugFunction);
+#endif
   
   //Change these according to your module, in configuration.h.
   diag.connect(connect_to_module, module_baud_rate);

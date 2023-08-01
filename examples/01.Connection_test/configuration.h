@@ -2,10 +2,12 @@
 #define connect_to_module 0x01
 
 //Select your target module speed:
-#define module_baud_rate 10400
+#define module_baud_rate 9600
 
+//Enable/disable printing library debug information on the Serial Monitor.
+#define debug_info false
 //Enable/disable printing bus traffic on the Serial Monitor.
-#define has_debug false
+#define debug_traffic false
 
 //Select whether or not your serial interface can receive at the same time as sending (or whether or not your K-line interface has echo as it should).
 //Most software serial libraries for AVR microcontrollers are half-duplex (can't receive while sending), so if using such library this should be false.

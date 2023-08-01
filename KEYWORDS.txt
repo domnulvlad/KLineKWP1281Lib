@@ -7,12 +7,14 @@
 ##########################################
 
 KLineKWP1281Lib	KEYWORD1
-EXECUTION_STATUS	KEYWORD1
-MEASUREMENT_TYPE	KEYWORD1
+executionStatus	KEYWORD1
+measurementType	KEYWORD1
 
 ##########################################
 # Functions (KEYWORD2)
 ##########################################
+
+KWP1281debugFunction	KEYWORD2
 
 custom5baudWaitFunction	KEYWORD2
 customErrorFunction	KEYWORD2
@@ -29,20 +31,28 @@ getCoding	KEYWORD2
 getWorkshopCode	KEYWORD2
 
 login	KEYWORD2
+
 recode	KEYWORD2
+
 readFaults	KEYWORD2
-clearFaults	KEYWORD2
 getFaultCode	KEYWORD2
-getFaultStatusCode	KEYWORD2
+getFaultElaborationCode	KEYWORD2
+getFaultElaboration	KEYWORD2
+clearFaults	KEYWORD2
+
 readAdaptation	KEYWORD2
 testAdaptation	KEYWORD2
 adapt	KEYWORD2
+
 basicSetting	KEYWORD2
+
 readGroup	KEYWORD2
 getMeasurementType	KEYWORD2
 getMeasurementValue	KEYWORD2
 getMeasurementUnits	KEYWORD2
+
 readROM	KEYWORD2
+
 outputTests	KEYWORD2
 
 ##########################################
@@ -57,6 +67,7 @@ UNKNOWN	LITERAL1
 VALUE	LITERAL1
 UNITS	LITERAL1
 
+initComplementDelay	LITERAL1
 complementDelay	LITERAL1
 byteDelay	LITERAL1
 blockDelay	LITERAL1

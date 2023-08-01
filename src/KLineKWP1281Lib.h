@@ -4,9 +4,13 @@
 //If the following line is commented out, all debug procedures are removed from the library (to save memory):
 #define KWP1281_DEBUG_SUPPORTED
 
-//There are some formulas whose units string comes from a large table.
-//If the following line is commented out, that table is removed and the formula returns "ENA25!":
+//There are some formulas whose units string comes from a large table. If the following line is commented out, that table is removed:
 #define KWP1281_TEXT_TABLE_SUPPORTED
+//(if disabled, the string given to getMeasurementUnits() will contain "EN_f25" if that formula is encountered)
+
+//If the following line is commented out, fault code elaboration strings are removed from the library (to save memory):
+//#define KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
+//(if disabled, the string given to getFaultElaboration() will contain "EN_elb")
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -17,6 +21,10 @@
   #include "text_table.h" //special text table, if enabled
 #endif
 
+#ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
+  #include "fault_code_elaboration.h" //fault code elaboration text table, if enabled
+#endif
+
 //AVR microcontrollers use 2-byte (word) pointers. Others, such as the ESP32, use 4-byte (dword) pointers.
 #if defined(__AVR__)
   #define READ_POINTER_FROM_PROGMEM pgm_read_word_near
@@ -24,53 +32,28 @@
   #define READ_POINTER_FROM_PROGMEM pgm_read_dword_near
 #endif
 
-#define KWP_ACKNOWLEDGE             0x09 //the module has no more data to send
-#define KWP_REFUSE                  0x0A //the module can not fulfill a request
-#define KWP_DISCONNECT              0x06 //the tester wants to disconnect from the module
-
-#define KWP_REQUEST_EXTRA_ID        0x00 //response: KWP_RECEIVE_ID_DATA (data available) / KWP_ACKNOWLEDGE (no data available)
-#define KWP_REQUEST_LOGIN           0x2B //response: KWP_ACKNOWLEDGE (login successful) / KWP_REFUSE (login not successful)
-#define KWP_REQUEST_RECODE          0x10 //response: KWP_REQUEST_EXTRA_ID...
-#define KWP_REQUEST_FAULT_CODES     0x07 //response: KWP_RECEIVE_FAULT_CODES (ok) / KWP_REFUSE (fault codes not supported)
-#define KWP_REQUEST_CLEAR_FAULTS    0x05 //response: KWP_ACKNOWLEDGE (ok) / KWP_REFUSE (clearing fault codes not supported)
-#define KWP_REQUEST_ADAPTATION      0x21 //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel)
-#define KWP_REQUEST_ADAPTATION_TEST 0x22 //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel)
-#define KWP_REQUEST_ADAPTATION_SAVE 0x2A //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel or value)
-#define KWP_REQUEST_GROUP_READING   0x29 //response: KWP_RECEIVE_GROUP_READING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid group)
-#define KWP_REQUEST_READ_ROM        0x03 //response: KWP_RECEIVE_ROM (ok) / KWP_REFUSE (reading ROM not supported or invalid parameters)
-#define KWP_REQUEST_OUTPUT_TEST     0x04 //response: KWP_RECEIVE_OUTPUT_TEST (ok) / KWP_REFUSE (output tests not supported)
-#define KWP_REQUEST_BASIC_SETTING   0x28 //response: KWP_RECEIVE_BASIC_SETTING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid channel or not supported)
-
-#define KWP_RECEIVE_ID_DATA         0xF6 //request: connect/KWP_REQUEST_EXTRA_ID/KWP_REQUEST_RECODE
-#define KWP_RECEIVE_FAULT_CODES     0xFC //request: KWP_REQUEST_FAULT_CODES
-#define KWP_RECEIVE_ADAPTATION      0xE6 //request: KWP_REQUEST_ADAPTATION/KWP_REQUEST_ADAPTATION_TEST/KWP_REQUEST_ADAPTATION_SAVE
-#define KWP_RECEIVE_GROUP_READING   0xE7 //request: KWP_REQUEST_GROUP_READING
-#define KWP_RECEIVE_ROM             0xFD //request: KWP_REQUEST_READ_ROM
-#define KWP_RECEIVE_OUTPUT_TEST     0xF5 //request: KWP_REQUEST_OUTPUT_TEST
-#define KWP_RECEIVE_BASIC_SETTING   0xF4 //request: KWP_REQUEST_BASIC_SETTING
-
-//Function pointer types for callbacks
-using callBack_type             = void (*)(void); //generic callback (for custom wait functions)
-using beginFunction_type        = void (*)(unsigned long baud); //beginFunction
-using endFunction_type          = void (*)(void); //endFunction
-using sendFunction_type         = void (*)(uint8_t data); //sendFunction
-using receiveFunction_type      = bool (*)(uint8_t &data); //receiveFunction
-using KWP1281debugFunction_type = void (*)(uint8_t* data, uint8_t length); //debugFunction
-
 class KLineKWP1281Lib
-{
+{  
   public:
     ///VARIABLES/TYPES
+
+    //Function pointer types for callbacks
+    using callBack_type             = void (*)(void);                                                                        //generic callback (for custom wait functions)
+    using beginFunction_type        = void (*)(unsigned long baud);                                                          //beginFunction
+    using endFunction_type          = void (*)(void);                                                                        //endFunction
+    using sendFunction_type         = void (*)(uint8_t data);                                                                //sendFunction
+    using receiveFunction_type      = bool (*)(uint8_t &data);                                                               //receiveFunction
+    using KWP1281debugFunction_type = void (*)(bool type, uint8_t sequence, uint8_t command, uint8_t* data, uint8_t length); //debugFunction
     
     //Return types for functions
-    enum EXECUTION_STATUS {
+    enum executionStatus {
       FAIL,
       SUCCESS,
       ERROR
     };
     
     //Measurement types
-    enum MEASUREMENT_TYPE {
+    enum measurementType {
       UNKNOWN,
       VALUE,
       UNITS
@@ -79,9 +62,11 @@ class KLineKWP1281Lib
     //Create an instance of the library
     KLineKWP1281Lib(
       beginFunction_type beginFunction, endFunction_type endFunction, sendFunction_type sendFunction, receiveFunction_type receiveFunction,
-      uint8_t tx_pin, bool full_duplex = true, HardwareSerial* debug_port = nullptr
+      uint8_t tx_pin, bool full_duplex = true, Stream* debug_port = nullptr
     );
     
+    //How many milliseconds to wait before sending a complement to the initialization bytes received from the module
+    uint16_t initComplementDelay = 40;
     //How many milliseconds to wait before sending a complement to a byte received from the module
     uint16_t complementDelay = 2;
     //How many milliseconds to wait before sending a byte in a block, after receiving a complement from the module
@@ -98,13 +83,16 @@ class KLineKWP1281Lib
     
     ///FUNCTIONS
     
+    //Attach a function to be called for debugging KWP1281 messages
+    void KWP1281debugFunction(KWP1281debugFunction_type debug_function);
+    
     //Define a custom function to execute while initializing at 5-baud (must take 200ms)
     void custom5baudWaitFunction(callBack_type function);
     //Define a custom function to execute if an error occurs and the connection is terminated
     void customErrorFunction(callBack_type function);
     
     //Attempt to connect to a module
-    EXECUTION_STATUS attemptConnect(uint8_t module, unsigned long baud_rate);
+    executionStatus attemptConnect(uint8_t module, unsigned long baud_rate);
     //Connect to a module
     void connect(uint8_t module, unsigned long baud_rate);
     //Maintain the connection
@@ -124,53 +112,80 @@ class KLineKWP1281Lib
     uint32_t getWorkshopCode();
     
     //Perform a login operation
-    EXECUTION_STATUS login(uint16_t login_code, uint32_t workshop_code);
+    executionStatus login(uint16_t login_code, uint32_t workshop_code);
     
     //Change the coding of a module
-    EXECUTION_STATUS recode(uint16_t coding, uint32_t workshop_code = 0);
+    executionStatus recode(uint16_t coding, uint32_t workshop_code = 0);
     
     //Get the module's fault codes
-    EXECUTION_STATUS readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer = nullptr, size_t fault_code_buffer_size = 0);
-    //Clear the module's fault codes
-    EXECUTION_STATUS clearFaults();
+    executionStatus readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer = nullptr, size_t fault_code_buffer_size = 0);
     //Get a fault code from a fault code reading
     static uint16_t getFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
-    //Get a fault status code from a fault code reading
-    static uint8_t getFaultStatusCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
+    //Get a fault elaboration code from a fault code reading
+    static uint8_t getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
+    //Get a fault elaboration string from a fault code reading
+    static char* getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size);
+    //Clear the module's fault codes
+    executionStatus clearFaults();
     
     //Read the value of an adaptation channel
-    EXECUTION_STATUS readAdaptation(uint8_t channel, uint16_t &value);
+    executionStatus readAdaptation(uint8_t channel, uint16_t &value);
     //Test if a value would work on an adaptation channel
-    EXECUTION_STATUS testAdaptation(uint8_t channel, uint16_t value);
+    executionStatus testAdaptation(uint8_t channel, uint16_t value);
     //Change the value of an adaptation channel
-    EXECUTION_STATUS adapt(uint8_t channel, uint16_t value, uint32_t workshop_code);
+    executionStatus adapt(uint8_t channel, uint16_t value, uint32_t workshop_code);
     
     //Perform a basic setting
-    EXECUTION_STATUS basicSetting(uint8_t group, uint8_t* basic_setting_buffer = nullptr, size_t basic_setting_buffer_size = 0);
+    executionStatus basicSetting(uint8_t group, uint8_t* basic_setting_buffer = nullptr, size_t basic_setting_buffer_size = 0);
     
     //Read a group measurement
-    EXECUTION_STATUS readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer = nullptr, size_t measurement_buffer_size = 0);
+    executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer = nullptr, size_t measurement_buffer_size = 0);
     //Get a measurement's type from a group reading (whether the value or the units is significant)
-    static MEASUREMENT_TYPE getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
+    static measurementType getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     //Get the calculated value of a measurement from a group reading
     static float getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     //Get the units of a measurement from a group reading
     static char* getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size);
     
     //Read a chunk of ROM/EEPROM
-    EXECUTION_STATUS readROM(uint8_t chunk_size, uint16_t start_address, uint8_t* memory_buffer = nullptr, uint8_t memory_buffer_size = 0);
+    executionStatus readROM(uint8_t chunk_size, uint16_t start_address, uint8_t* memory_buffer = nullptr, uint8_t memory_buffer_size = 0);
     
     //Perform output tests
-    EXECUTION_STATUS outputTests(uint16_t &returned_ID);
+    executionStatus outputTests(uint16_t &returned_ID);
     
   private:
     ///VARIABLES/TYPES
+    static const uint8_t KWP_ACKNOWLEDGE             = 0x09; //the module has no more data to send
+    static const uint8_t KWP_REFUSE                  = 0x0A; //the module can not fulfill a request
+    static const uint8_t KWP_DISCONNECT              = 0x06; //the tester wants to disconnect from the module
+    
+    static const uint8_t KWP_REQUEST_EXTRA_ID        = 0x00; //response: KWP_RECEIVE_ID_DATA (data available) / KWP_ACKNOWLEDGE (no data available)
+    static const uint8_t KWP_REQUEST_LOGIN           = 0x2B; //response: KWP_ACKNOWLEDGE (login successful) / KWP_REFUSE (login not successful)
+    static const uint8_t KWP_REQUEST_RECODE          = 0x10; //response: KWP_REQUEST_EXTRA_ID...
+    static const uint8_t KWP_REQUEST_FAULT_CODES     = 0x07; //response: KWP_RECEIVE_FAULT_CODES (ok) / KWP_REFUSE (fault codes not supported)
+    static const uint8_t KWP_REQUEST_CLEAR_FAULTS    = 0x05; //response: KWP_ACKNOWLEDGE (ok) / KWP_REFUSE (clearing fault codes not supported)
+    static const uint8_t KWP_REQUEST_ADAPTATION      = 0x21; //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel)
+    static const uint8_t KWP_REQUEST_ADAPTATION_TEST = 0x22; //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel)
+    static const uint8_t KWP_REQUEST_ADAPTATION_SAVE = 0x2A; //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel or value)
+    static const uint8_t KWP_REQUEST_GROUP_READING   = 0x29; //response: KWP_RECEIVE_GROUP_READING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid group)
+    static const uint8_t KWP_REQUEST_READ_ROM        = 0x03; //response: KWP_RECEIVE_ROM (ok) / KWP_REFUSE (reading ROM not supported or invalid parameters)
+    static const uint8_t KWP_REQUEST_OUTPUT_TEST     = 0x04; //response: KWP_RECEIVE_OUTPUT_TEST (ok) / KWP_REFUSE (output tests not supported)
+    static const uint8_t KWP_REQUEST_BASIC_SETTING   = 0x28; //response: KWP_RECEIVE_BASIC_SETTING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid channel or not supported)
+    
+    static const uint8_t KWP_RECEIVE_ID_DATA         = 0xF6; //request: connect/KWP_REQUEST_EXTRA_ID/KWP_REQUEST_RECODE
+    static const uint8_t KWP_RECEIVE_FAULT_CODES     = 0xFC; //request: KWP_REQUEST_FAULT_CODES
+    static const uint8_t KWP_RECEIVE_ADAPTATION      = 0xE6; //request: KWP_REQUEST_ADAPTATION/KWP_REQUEST_ADAPTATION_TEST/KWP_REQUEST_ADAPTATION_SAVE
+    static const uint8_t KWP_RECEIVE_GROUP_READING   = 0xE7; //request: KWP_REQUEST_GROUP_READING
+    static const uint8_t KWP_RECEIVE_ROM             = 0xFD; //request: KWP_REQUEST_READ_ROM
+    static const uint8_t KWP_RECEIVE_OUTPUT_TEST     = 0xF5; //request: KWP_REQUEST_OUTPUT_TEST
+    static const uint8_t KWP_RECEIVE_BASIC_SETTING   = 0xF4; //request: KWP_REQUEST_BASIC_SETTING
     
     //Callback functions
-    beginFunction_type   _beginFunction;
-    endFunction_type     _endFunction;
-    sendFunction_type    _sendFunction;
-    receiveFunction_type _receiveFunction;
+    beginFunction_type        _beginFunction;
+    endFunction_type          _endFunction;
+    sendFunction_type         _sendFunction;
+    receiveFunction_type      _receiveFunction;
+    KWP1281debugFunction_type _debugFunction;
     
     //Selected transmit pin
     uint8_t _tx_pin;
@@ -179,7 +194,7 @@ class KLineKWP1281Lib
     bool _full_duplex;
     
     //Optional debug port
-    HardwareSerial* _debug_port;
+    Stream* _debug_port;
     
     //Return types for some functions
     enum RETURN_TYPE {
@@ -228,7 +243,6 @@ class KLineKWP1281Lib
       RECEIVED_ID_PART2,
       NO_CODING_WSC_AVAILABLE,
       RECEIVED_CODING_WSC,
-      INV_MSG_LEN,
       EXTRA_ID_AVAILABLE,
       NO_EXTRA_ID_AVAILABLE,
       NO_EXTRA_ID_PART1_AVAILABLE,
@@ -267,7 +281,9 @@ class KLineKWP1281Lib
       
       OUTPUT_TESTS_NOT_SUPPORTED,
       RECEIVED_OUTPUT_TEST,
-      END_OF_OUTPUT_TESTS
+      END_OF_OUTPUT_TESTS,
+      
+      DISCONNECT_INFO
     };
     
     //Current parameters
@@ -298,7 +314,7 @@ class KLineKWP1281Lib
     void bitbang_5baud(uint8_t module);
     
     //Read the module's identification strings and values
-    EXECUTION_STATUS read_identification();
+    executionStatus read_identification();
     
     //Receive parameters during initialization
     bool receive_parameters(uint8_t* buffer);
@@ -324,6 +340,94 @@ class KLineKWP1281Lib
     
     //Describe the received command in a block
     void show_command_description(uint8_t command);
+    
+    /*
+      Fault elaboration code: 7-bit + 1 bit; high-bit=Intermittent
+        00 - -
+        01 - Signal Shorted to Plus
+        02 - Signal Shorted to Ground
+        03 - No Signal
+        04 - Mechanical Malfunction
+        05 - Input Open
+        06 - Signal too High
+        07 - Signal too Low
+        08 - Control Limit Surpassed
+        09 - Adaptation Limit Surpassed
+        10 - Adaptation Limit Not Reached
+        11 - Control Limit Not Reached
+        12 - Adaptation Limit (Mul) Exceeded
+        13 - Adaptation Limit (Mul) Not Reached
+        14 - Adaptation Limit (Add) Exceeded
+        14 - Adaptation Limit (Add) Exceeded
+        15 - Adaptation Limit (Add) Not Reached
+        16 - Signal Outside Specifications
+        17 - Control Difference
+        18 - Upper Limit
+        19 - Lower Limit
+        20 - Malfunction in Basic Setting
+        21 - Front Pressure Build-up Time too Long
+        22 - Front Pressure Reducing Time too Long
+        23 - Rear Pressure Build-up Time too Long
+        24 - Rear Pressure Reducing Time too Long
+        25 - Unknown Switch Condition
+        26 - Output Open
+        27 - Implausible Signal
+        28 - Short to Plus
+        29 - Short to Ground
+        30 - Open or Short to Plus
+        31 - Open or Short to Ground
+        32 - Resistance Too High
+        33 - Resistance Too Low
+        34 - No Elaboration Available
+        35 - -
+        36 - Open Circuit
+        37 - Faulty
+        38 - Output won't Switch or Short to Plus
+        39 - Output won't Switch or Short to Ground
+        40 - Short to Another Output
+        41 - Blocked or No Voltage
+        42 - Speed Deviation too High
+        43 - Closed
+        44 - Short Circuit
+        45 - Connector
+        46 - Leaking
+        47 - No Communications or Incorrectly Connected
+        48 - Supply voltage
+        49 - No Communications
+        50 - Setting (Early) Not Reached
+        51 - Setting (Late) Not Reached
+        52 - Supply Voltage Too High
+        53 - Supply Voltage Too Low
+        54 - Incorrectly Equipped
+        55 - Adaptation Not Successful
+        56 - In Limp-Home Mode
+        57 - Electric Circuit Failure
+        58 - Can't Lock
+        59 - Can't Unlock
+        60 - Won't Safe
+        61 - Won't De-Safe
+        62 - No or Incorrect Adjustment
+        63 - Temperature Shut-Down
+        64 - Not Currently Testable
+        65 - Unauthorized
+        66 - Not Matched
+        67 - Set-Point Not Reached
+        68 - Cylinder 1
+        69 - Cylinder 2
+        70 - Cylinder 3
+        71 - Cylinder 4
+        72 - Cylinder 5
+        73 - Cylinder 6
+        74 - Cylinder 7
+        75 - Cylinder 8
+        76 - Terminal 30 missing
+        77 - Internal Supply Voltage
+        78 - Missing Messages
+        79 - Please Check Fault Codes
+        80 - Single-Wire Operation
+        81 - Open
+        82 - Activated
+    */
 };
 
 #endif
