@@ -9,7 +9,7 @@
 //(if disabled, the string given to getMeasurementUnits() will contain "EN_f25" if that formula is encountered)
 
 //If the following line is commented out, fault code elaboration strings are removed from the library (to save memory):
-//#define KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
+#define KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
 //(if disabled, the string given to getFaultElaboration() will contain "EN_elb")
 
 /////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
