@@ -25,7 +25,7 @@
   #include "fault_code_elaboration.h" //fault code elaboration text table, if enabled
 #endif
 
-//AVR microcontrollers use 2-byte (word) pointers. Others, such as the ESP32, use 4-byte (dword) pointers.
+//AVR microcontrollers use 2-byte (word) pointers. Others use 4-byte (dword) pointers.
 #if defined(__AVR__)
   #define READ_POINTER_FROM_PROGMEM pgm_read_word_near
 #else

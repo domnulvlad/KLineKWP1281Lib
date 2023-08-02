@@ -49,6 +49,13 @@
         *K-line TX -> RX pin 4 (D2)
         *K-line RX -> TX pin 5 (D1)
 
+  Raspberry Pi Pico
+    *has two additional serial ports
+    *pins: interchangeable
+      *default:
+        *K-line TX -> Serial1 - RX pin 1 / Serial2 - RX pin 9
+        *K-line RX -> Serial1 - TX pin 0 / Serial2 - TX pin 8
+
   ***If using the first hardware serial port (Serial) (with other sketches), the interface must be disconnected during code upload, and no "Serial.print"s
   should be used.
   

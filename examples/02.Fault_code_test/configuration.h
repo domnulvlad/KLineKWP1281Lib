@@ -52,6 +52,16 @@
   #define TX_pin 5 //D1
 */
 
+//Raspberry Pi Pico (can use Serial1/Serial2)
+/*
+  #define K_line Serial1
+  #define TX_pin 0
+*/
+/*
+  #define K_line Serial2
+  #define TX_pin 8
+*/
+
 #ifndef K_line
   #error Please select an option in configuration.h!
 #endif
