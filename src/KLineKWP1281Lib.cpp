@@ -18,7 +18,7 @@
   
   Notes:
     *The return type and parameters taken by each callback function are explained above in brackets.
-    *The receiveFunction return false if no byte is available. If a byte is available, it is stored in the byte passed as reference and it returns true.
+    *The receiveFunction must return false if no byte is available. If a byte is available, it is stored in the byte passed as reference and it returns true.
     *If, for some reason, the K-line does not echo back the bytes received, full_duplex should be set to false even if the serial interface is capable of
     receiving while sending.
   
@@ -37,7 +37,7 @@
     ||
     ||bool receiveFunction(uint8_t &data) {
     ||  if (Serial1.available()) {
-    ||    data = KLine.read();
+    ||    data = Serial1.read();
     ||    return true;
     ||  }
     ||  return false;
@@ -59,7 +59,7 @@ KLineKWP1281Lib::KLineKWP1281Lib(beginFunction_type beginFunction, endFunction_t
     KWP1281debugFunction(KWP1281debugFunction_type debug_function)
   
   Parameters:
-    debug_function -> function to execute after receiving a KWP1281 message, to show it
+    debug_function -> function to execute after sending/receiving a KWP1281 message, to show it
   
   Description:
     Attaches a function to be called for debugging KWP1281 messages.
@@ -110,13 +110,13 @@ void KLineKWP1281Lib::KWP1281debugFunction(KWP1281debugFunction_type debug_funct
 
 /**
   Function:
-    custom5baudWaitFunction(function)
+    custom5baudWaitFunction(callBack_type function)
   
   Parameters:
     function -> routine to execute after sending each bit during the 5-baud-init procedure
   
   Description:
-    Defines a custom function to execute while initializing the control module.
+    Attaches a custom function to be executed while initializing the control module.
   
   Notes:
     *To achieve a baud rate of 5, the custom function must take 200 milliseconds.
@@ -130,13 +130,13 @@ void KLineKWP1281Lib::custom5baudWaitFunction(callBack_type function)
 
 /**
   Function:
-    customErrorFunction(function)
+    customErrorFunction(callBack_type function)
   
   Parameters:
     function -> routine to execute when a communication error occurs
   
   Description:
-    Defines a custom function to execute if an error occurs.
+    Attaches a custom function to be executed if an error occurs.
   
   Notes:
     *It will be called once, after a timeout occurs while waiting for data.
@@ -809,7 +809,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::clearFaults()
   
   Parameters:
     channel -> adaptation channel to read
-    &value -> will store the value read from the channel
+    value   -> will store the value read from the channel
   
   Returns:
     executionStatus -> whether or not the operation executed successfully
@@ -852,7 +852,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readAdaptation(uint8_t channel
   
   Parameters:
     channel -> adaptation channel to test the value on
-    value -> value to test
+    value   -> value to test
   
   Returns:
     executionStatus -> whether or not the operation executed successfully
@@ -901,8 +901,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::testAdaptation(uint8_t channel
     adapt(uint8_t channel, uint16_t value, uint32_t workshop_code)
   
   Parameters:
-    channel -> adaptation channel to modify
-    value -> value to store in the channel
+    channel       -> adaptation channel to modify
+    value         -> value to store in the channel
     workshop_code -> WSC to use
   
   Returns:
@@ -1218,7 +1218,7 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t mea
     getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
   
   Parameters:
-    measurement_index       -> index of the measurement that needs to be calculated (0-4)
+    measurement_index       -> index of the measurement that needs to be calculated (0-3)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
     measurement_buffer[]    -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
@@ -1924,8 +1924,8 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     readROM(uint8_t chunk_size, uint16_t start_address, uint8_t memory_buffer[], uint8_t memory_buffer_size)
   
   Parameters:
-    chunk_size -> how many bytes to read
-    memory_buffer[] -> array into which to store the bytes read
+    chunk_size         -> how many bytes to read
+    memory_buffer[]    -> array into which to store the bytes read
     memory_buffer_size -> total (maximum) length of the given array
   
   Returns:

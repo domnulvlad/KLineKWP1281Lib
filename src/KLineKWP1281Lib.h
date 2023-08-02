@@ -38,7 +38,7 @@ class KLineKWP1281Lib
     ///VARIABLES/TYPES
 
     //Function pointer types for callbacks
-    using callBack_type             = void (*)(void);                                                                        //generic callback (for custom wait functions)
+    using callBack_type             = void (*)(void);                                                                        //generic callback (for custom functions)
     using beginFunction_type        = void (*)(unsigned long baud);                                                          //beginFunction
     using endFunction_type          = void (*)(void);                                                                        //endFunction
     using sendFunction_type         = void (*)(uint8_t data);                                                                //sendFunction
