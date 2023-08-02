@@ -3,10 +3,10 @@
     03.Full_measurement_test.ino
 
   Description:
-    Demonstrates how to read a module's measurement blocks.
+    Demonstrates how to read a module's measuring blocks.
 
   Notes:
-    *Measurement blocks 1-255 will be read, after which the connection will be stopped.
+    *Measuring blocks 0-255 will be read, after which the connection will be stopped.
 */
 
 /*
@@ -109,14 +109,18 @@ void setup() {
   
   //Change these according to your module, in configuration.h.
   diag.connect(connect_to_module, module_baud_rate);
+    
+  Serial.println("Requesting measuring blocks 000-255.");
   
-  //Read all groups (001-255).
-  for (uint8_t i = 1; i != 0; i++) {
+  //Read all groups (000-255).
+  for (uint16_t i = 0; i <= 255; i++) {
     showMeasurements(i);
   }
   
   //Disconnect from the module.
   diag.disconnect();
+  
+  Serial.println("Disconnected.");
 }
 
 void loop() {
@@ -133,17 +137,17 @@ void showMeasurements(uint8_t block) {
   uint8_t amount_of_measurements = 0;
   switch (diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements))) {
     case KLineKWP1281Lib::ERROR:
-      Serial.println(F("Error reading measurements!"));
+      Serial.println("Error reading measurements!");
       break;
     
     case KLineKWP1281Lib::FAIL:
-      Serial.print(F("Block "));
+      Serial.print("Block ");
       Serial.print(block);
-      Serial.println(F(" does not exist!"));
+      Serial.println(" does not exist!");
       break;
     
     case KLineKWP1281Lib::SUCCESS:
-      Serial.print(F("Block "));
+      Serial.print("Block ");
       Serial.print(block);
       Serial.println(':');
       

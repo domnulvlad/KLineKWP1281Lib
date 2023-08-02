@@ -1,19 +1,20 @@
 /*
   Title:
-    04.Continuous_measurement_test.ino
+    05.Single_measurement_test.ino
 
   Description:
-    Demonstrates how to read a module's measuring block continuously.
+    Demonstrates how to read a single measurement from a module's measuring blocks continuously.
 
   Notes:
-    *You can change which block to read by modifying the #define below.
-    *This block will be read continuously while the sketch is running.
+    *You can change which block and which measurement to read by modifying the #defines below.
+    *This measurement will be read continuously while the sketch is running.
     *It is not necessary to maintain the connection with "diag.update();" in the loop, because any request will have the same effect (update() must be used in
     periods of inactivity).
 */
 
-//Change which block to read.
+//Change which measurement to read, from which block.
 #define BLOCK_TO_READ 1
+#define MEASUREMENT_TO_READ 0 //valid range: 0-3
 
 /*
   *This sketch displays information in the Serial Monitor, so another serial port is required for the K-line.
@@ -118,14 +119,16 @@ void setup() {
   
   Serial.print("Requesting block ");
   Serial.print(BLOCK_TO_READ);
+  Serial.print(", measurement index ");
+  Serial.print(MEASUREMENT_TO_READ);
   Serial.println(" continuously.");
 }
 
 void loop() {
-  showMeasurements(BLOCK_TO_READ);
+  showSingleMeasurement(BLOCK_TO_READ, MEASUREMENT_TO_READ);
 }
 
-void showMeasurements(uint8_t block) {
+void showSingleMeasurement(uint8_t block, uint8_t measurement_index) {
   /*
     The readGroup() function can return:
       *KLineKWP1281Lib::SUCCESS - received measurements
@@ -145,46 +148,35 @@ void showMeasurements(uint8_t block) {
       break;
     
     case KLineKWP1281Lib::SUCCESS:
-      Serial.print("Block ");
-      Serial.print(block);
-      Serial.println(':');
-      
       //Will hold the measurement's units
       char units_string[16];
       
-      //Display each measurement.
-      for (uint8_t i = 0; i < 4; i++) {
-        //Format the values with a leading tab.
-        Serial.print('\t');
+      //Display the selected measurement.
+      
+      /*
+        The getMeasurementType() function can return:
+          *KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
+          *KLineKWP1281Lib::UNITS   - the measurement contains human-readable text in the units string
+          *KLineKWP1281Lib::VALUE   - "regular" measurement, with a value and units
+      */
+      switch (KLineKWP1281Lib::getMeasurementType(measurement_index, amount_of_measurements, measurements, sizeof(measurements))) {
+        //Value and units
+        case KLineKWP1281Lib::VALUE:
+          Serial.print(KLineKWP1281Lib::getMeasurementValue(measurement_index, amount_of_measurements, measurements, sizeof(measurements)));
+          Serial.print(' ');
+          Serial.println(KLineKWP1281Lib::getMeasurementUnits(measurement_index, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
+          break;
         
-        /*
-          The getMeasurementType() function can return:
-            *KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
-            *KLineKWP1281Lib::UNITS   - the measurement contains human-readable text in the units string
-            *KLineKWP1281Lib::VALUE   - "regular" measurement, with a value and units
-        */
-        switch (KLineKWP1281Lib::getMeasurementType(i, amount_of_measurements, measurements, sizeof(measurements))) {
-          //Value and units
-          case KLineKWP1281Lib::VALUE:
-            Serial.print(KLineKWP1281Lib::getMeasurementValue(i, amount_of_measurements, measurements, sizeof(measurements)));
-            Serial.print(' ');
-            Serial.println(KLineKWP1281Lib::getMeasurementUnits(i, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
-            break;
-          
-          //Units string containing text
-          case KLineKWP1281Lib::UNITS:
-            Serial.println(KLineKWP1281Lib::getMeasurementUnits(i, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
-            break;
-          
-          //Invalid measurement index
-          case KLineKWP1281Lib::UNKNOWN:
-            Serial.println("N/A");
-            break;
-        }
+        //Units string containing text
+        case KLineKWP1281Lib::UNITS:
+          Serial.println(KLineKWP1281Lib::getMeasurementUnits(measurement_index, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
+          break;
+        
+        //Invalid measurement index
+        case KLineKWP1281Lib::UNKNOWN:
+          Serial.println("N/A");
+          break;
       }
-
-      //Leave an empty line.
-      Serial.println();
       break;
   }
 }

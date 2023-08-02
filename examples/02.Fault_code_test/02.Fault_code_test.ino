@@ -108,12 +108,16 @@ void setup() {
   
   //Change these according to your module, in configuration.h.
   diag.connect(connect_to_module, module_baud_rate);
+    
+  Serial.println("Requesting fault codes.");
 
   //Show the module's fault codes (procedure moved to a function).
   showDTCs();
 
   //Disconnect from the module.
   diag.disconnect();
+  
+  Serial.println("Disconnected.");
 }
 
 void loop() {

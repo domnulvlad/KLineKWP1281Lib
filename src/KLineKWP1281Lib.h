@@ -136,7 +136,9 @@ class KLineKWP1281Lib
     executionStatus adapt(uint8_t channel, uint16_t value, uint32_t workshop_code);
     
     //Perform a basic setting
-    executionStatus basicSetting(uint8_t group, uint8_t* basic_setting_buffer = nullptr, size_t basic_setting_buffer_size = 0);
+    executionStatus basicSetting(uint8_t &amount_of_values, uint8_t group, uint8_t* basic_setting_buffer = nullptr, size_t basic_setting_buffer_size = 0);
+    //Get a value from a basic setting reading
+    static uint8_t getBasicSettingValue(uint8_t value_index, uint8_t amount_of_values, uint8_t* basic_setting_buffer = nullptr, size_t basic_setting_buffer_size = 0);
     
     //Read a group measurement
     executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer = nullptr, size_t measurement_buffer_size = 0);
@@ -168,9 +170,11 @@ class KLineKWP1281Lib
     static const uint8_t KWP_REQUEST_ADAPTATION_TEST = 0x22; //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel)
     static const uint8_t KWP_REQUEST_ADAPTATION_SAVE = 0x2A; //response: KWP_RECEIVE_ADAPTATION (ok) / KWP_REFUSE (invalid channel or value)
     static const uint8_t KWP_REQUEST_GROUP_READING   = 0x29; //response: KWP_RECEIVE_GROUP_READING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid group)
+    static const uint8_t KWP_REQUEST_GROUP_READING_0 = 0x12; //response: KWP_RECEIVE_GROUP_READING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid group)
     static const uint8_t KWP_REQUEST_READ_ROM        = 0x03; //response: KWP_RECEIVE_ROM (ok) / KWP_REFUSE (reading ROM not supported or invalid parameters)
     static const uint8_t KWP_REQUEST_OUTPUT_TEST     = 0x04; //response: KWP_RECEIVE_OUTPUT_TEST (ok) / KWP_REFUSE (output tests not supported)
     static const uint8_t KWP_REQUEST_BASIC_SETTING   = 0x28; //response: KWP_RECEIVE_BASIC_SETTING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid channel or not supported)
+    static const uint8_t KWP_REQUEST_BASIC_SETTING_0 = 0x11; //response: KWP_RECEIVE_BASIC_SETTING (ok) / KWP_ACKNOWLEDGE (empty group) / KWP_REFUSE (invalid channel or not supported)
     
     static const uint8_t KWP_RECEIVE_ID_DATA         = 0xF6; //request: connect/KWP_REQUEST_EXTRA_ID/KWP_REQUEST_RECODE
     static const uint8_t KWP_RECEIVE_FAULT_CODES     = 0xFC; //request: KWP_REQUEST_FAULT_CODES
