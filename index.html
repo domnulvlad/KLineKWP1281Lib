@@ -11,37 +11,31 @@
   </head>
   <body>
     <article class="markdown-body"><h2 id="KLineKWP1281Lib"><a class="header-link" href="#KLineKWP1281Lib"></a>KLineKWP1281Lib</h2>
-<p><strong>KLineKWP1281Lib</strong> is a library used for communicating with VAG control modules which use the proprietary VAG Key-Word 1281 protocol (KWP1281/KW1281), through an Arduino / ESP development board.</p>
+<p><strong>KLineKWP1281Lib</strong> is a library designed for communicating with VAG control modules which use the proprietary VAG Key-Word 1281 protocol (KWP1281/KW1281), through an Arduino / ESP / RPi Pico development board.</p>
 <p><a href="https://github.com/domnulvlad/KLineKWP1281Lib"><img src=assets\gh.png alt="GitHub"></a></p>
 <h2 id="supported-features"><a class="header-link" href="#supported-features"></a>Supported features:</h2>
 <ul class="list">
 <li><strong>Ability to use any method to send and receive data</strong> (best being a hardware serial port, or software serial if an additional port is not available)</li>
-<li>Connecting to any control module that supports KWP1281</li>
-<li>Reading the module&#39;s part number + extra fields</li>
-<li>Reading coding and WSC</li>
-<li>Reading the module&#39;s identification field (for example, the vehicle&#39;s VIN)</li>
-<li>&quot;Login&quot;</li>
-<li>&quot;Coding&quot; for changing the coding and/or WSC</li>
-<li>&quot;Fault Codes&quot; for reading stored fault codes and their status</li>
-<li>Clearing stored fault codes</li>
-<li>&quot;Adaptation&quot; for reading an adaptation value on a specified channel</li>
-<li>Testing an adaptation value on a specified channel</li>
-<li>Saving an adaptation value to a specified channel</li>
-<li>&quot;Meas. Blocks&quot; for reading for an entire measuring block (calculating actual value + providing proper units of measurement for any measurement and providing text strings for those that require it)</li>
-<li>Reading ROM / EEPROM (firmware)</li>
-<li>&quot;Output Tests&quot;</li>
-<li>&quot;Basic Settings&quot;</li>
 <li>Ability to keep the connection alive while doing other tasks</li>
+<li>Connecting to any control module that supports KWP1281</li>
+<li>Reading the module&#39;s part number + extra fields, coding, WSC</li>
+<li>Recoding</li>
+<li>Performing a login operation</li>
+<li>Reading stored fault codes and their elaboration</li>
+<li>Clearing stored fault codes</li>
+<li>Reading, testing and saving an adaptation value</li>
+<li>Reading measuring blocks, calculating a measurement's value and providing its units (or text from a table, where applicable)
+<li>Reading ROM / EEPROM (firmware)</li>
+<li>Performing actuator tests</li>
+<li>Performing basic settings</li>
 </ul>
 <h2 id="currently-unsupported-features"><a class="header-link" href="#currently-unsupported-features"></a>Currently unsupported features:</h2>
 <ul class="list">
-<li>&quot;Security Access&quot;</li>
 <li>Measurement / DTC labels or descriptions</li>
 </ul>
 <h2 id="getting-started"><a class="header-link" href="#getting-started"></a>Getting started</h2>
 <p>Download <a href="https://github.com/domnulvlad/KLineKWP1281Lib/releases/latest">the latest release (.zip)</a> and <a href="https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries#importing-a-zip-library">add it to your Arduino IDE</a>.</p>
-<p><strong>Read the documentation on <a href="https://github.com/domnulvlad/KLineKWP1281Lib/wiki">the wiki</a>!</strong></p>
-<p>After completing the hardware setup, proceed to upload the first demo by navigating to <code>File -&gt; Examples -&gt; KLineKWP1281Lib -&gt; 01.Connection_test</code> in the Arduino IDE.</p>
+<p><strong>Read the documentation on <a href="https://github.com/domnulvlad/KLineKWP1281Lib/wiki">the wiki</a>!</strong> Chapter 3 describes using the demo sketches.</p>
 <h2 id="credits"><a class="header-link" href="#credits"></a>Credits</h2>
 <p>Thanks go out to these people for their efforts:</p>
 <ul class="list">
