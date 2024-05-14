@@ -36,8 +36,11 @@ recode	KEYWORD2
 
 readFaults	KEYWORD2
 getFaultCode	KEYWORD2
+getFaultDescription	KEYWORD2
+getFaultDescriptionLength	KEYWORD2
 getFaultElaborationCode	KEYWORD2
 getFaultElaboration	KEYWORD2
+getFaultElaborationLength	KEYWORD2
 clearFaults	KEYWORD2
 
 readAdaptation	KEYWORD2

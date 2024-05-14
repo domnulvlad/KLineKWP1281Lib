@@ -41,6 +41,14 @@
 /*
   #define K_line Serial2
   #define TX_pin 17
+  #define RX_pin 16
+*/
+
+//ESP32-C6 (can use Serial1)
+/*
+  #define K_line Serial1
+  #define TX_pin 17
+  #define RX_pin 16
 */
 
 //ESP8266 (no additional hardware serial ports, must use software serial)

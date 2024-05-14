@@ -7,6 +7,15 @@
 
   Notes:
     *The connection will be stopped after the fault codes are read.
+    *If you are using the ESP32 platform, feel free to uncomment the line "#define KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED" in "KLineKWP1281Lib.h",
+    in order to get descriptive names associated with each fault code. This feature doesn't yet work on the AVR platform, but you can take a look at
+    the "fault_code_description_xx.h" files if you need these descriptions.
+    *If you have descriptions enabled, you can choose from a few different languages a bit further below in "KLineKWP1281Lib.h". Please only choose
+    one option.
+    *If you have manually disabled elaborations by commenting out the line "#define KWP1281_FAULT_CODE_ELABORATION_SUPPORTED" in "KLineKWP1281Lib.h",
+    the elaborations will be replaced by "EN_elb".
+    *If you have elaborations enabled, you can choose from a few different languages a bit further below in "KLineKWP1281Lib.h". Please only choose
+    one option.
 */
 
 /*
@@ -29,9 +38,9 @@
       *K-line TX -> Serial1 - RX pin 19 / Serial2 - RX pin 17 / Serial3 - RX pin 15
       *K-line RX -> Serial1 - TX pin 18 / Serial2 - TX pin 16 / Serial3 - TX pin 14
 
-  ESP32
+  ESP32 / ESP32-C6
     *has one additional serial port
-    *pins:
+    *pins (they can be remapped, this is what they are configured to in these examples):
       *K-line TX -> RX pin 16
       *K-line RX -> TX pin 17
 
@@ -161,29 +170,69 @@ void showDTCs() {
       //Store the fault code in a string.
       char dtc_str[8];
       sprintf(dtc_str, "%05u", dtc);
+
+      //Print the fault code.
+      Serial.print("  ");
+      Serial.print(dtc_str);
+
+      // If fault code descriptions are enabled, display the description along with the fault code.
+#ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+      //Declare a character array and use it to store the description string.
+      char description_string[32];
+      KLineKWP1281Lib::getFaultDescription(i, available_DTCs, faults, sizeof(faults), description_string, sizeof(description_string));
+
+      //Print the description string.
+      Serial.print(" - ");
+      Serial.print(description_string);
+
+      //Get the full length of the description string, to warn the user if the provided buffer wasn't large enough to store the entire string.
+      size_t description_string_length = KLineKWP1281Lib::getFaultDescriptionLength(i, available_DTCs, faults, sizeof(faults));
+
+      //If the buffer was too small, display an ellipsis and indicate how many characters would have been needed for the entire string.
+      if (description_string_length > (sizeof(description_string) - 1))
+      {
+        Serial.print("... (");
+        Serial.print(sizeof(description_string) - 1);
+        Serial.print("/");
+        Serial.print(description_string_length);
+        Serial.print(")");
+      }
+#endif
+      Serial.println();
       
       //Store the elaboration code (without the high bit) in a string.
       char dtc_status_str[8];
       sprintf(dtc_status_str, "%02u-%02u", dtc_elaboration_code & ~0x80, ((dtc_elaboration_code & 0x80) ? 10 : 0));
       
-      //Print the fault code and its elaboration code.
-      Serial.print("  ");
-      Serial.print(dtc_str);
-      Serial.print(" - ");
-      Serial.println(dtc_status_str);
-      
-      //Declare a character array and use it to store the elaboration string.
-      char elaboration_string[32];
-
-      //Declare a bool that indicates whether or not the fault is intermittent.
+      //Declare a bool that indicates whether or not the fault is intermittent, which will be changed accordingly by the getFaultElaboration() function.
       bool is_intermittent;
 
-      //Get the elaboration string.
+      //Declare a character array and use it to store the elaboration string.
+      char elaboration_string[32];
       KLineKWP1281Lib::getFaultElaboration(is_intermittent, i, available_DTCs, faults, sizeof(faults), elaboration_string, sizeof(elaboration_string));
 
-      //Print the elaboration string.
+      //Print the fault elaboration code.
       Serial.print("    ");
+      Serial.print(dtc_status_str);
+
+      //Print the elaboration string.
+      Serial.print(" ");
       Serial.print(elaboration_string);
+      
+      //Get the full length of the elaboration string, to warn the user if the provided buffer wasn't large enough to store the entire string.
+      size_t elaboration_string_length = KLineKWP1281Lib::getFaultElaborationLength(i, available_DTCs, faults, sizeof(faults));
+
+      //If the buffer was too small, display an ellipsis and indicate how many characters would have been needed for the entire string.
+      if (elaboration_string_length > (sizeof(elaboration_string) - 1))
+      {
+        Serial.print("... (");
+        Serial.print(sizeof(elaboration_string) - 1);
+        Serial.print("/");
+        Serial.print(elaboration_string_length);
+        Serial.print(")");
+      }
+
+      // If the fault is intermittent, display this info.
       if (is_intermittent) {
         Serial.print(" - Intermittent");
       }

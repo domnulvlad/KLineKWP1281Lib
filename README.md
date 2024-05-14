@@ -8,16 +8,17 @@
 - Reading the module's part number + extra fields, coding, WSC
 - Recoding
 - Performing a login operation
-- Reading stored fault codes and their elaboration
+- **Reading stored fault codes and their elaboration codes**
+- **Converting fault/elaboration codes to strings** (available in a few different languages)
 - Clearing stored fault codes
 - Reading, testing and saving an adaptation value
-- Reading measuring blocks, calculating a measurement's value and providing its units (or text from a table, where applicable)
+- **Reading measuring blocks, calculating a measurement's value and providing its units, or displaying text from a table where applicable** (available in a few different languages)
 - Reading ROM / EEPROM (firmware)
 - Performing actuator tests
 - Performing basic settings
 
 ## Currently unsupported features:
-- Measurement / DTC labels or descriptions
+- Multi-instance support for managing multiple K-lines at the same time
 
 ## Getting started
 Download [the latest release (.zip)](https://github.com/domnulvlad/KLineKWP1281Lib/releases/latest) and [add it to your Arduino IDE](https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries#importing-a-zip-library).
@@ -31,4 +32,4 @@ Thanks go out to these people for their efforts:
 * [Mike Naberezny](https://github.com/mnaberez/vwradio/blob/main/kwp1281_tool/firmware/kwp1281.h), for more insight about the commands and parameters
 
 ## Contact
-For any inquiries, you can contact me at [ne555timer@yahoo.com](mailto:ne555timer@yahoo.com).
+For any inquiries, you can open an issue or contact me at [ne555timer@yahoo.com](mailto:ne555timer@yahoo.com).

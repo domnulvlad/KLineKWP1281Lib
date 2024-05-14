@@ -1,6 +1,12 @@
 //Initializes the serial port
 void beginFunction(unsigned long baud) {
+#ifdef RX_pin
+  // The configuration for the ESP32 has both the RX and TX pins defined (for consistency), since they can be mapped to any pins.
+  K_line.begin(baud, SERIAL_8N1, RX_pin, TX_pin);
+#else
+  // For other boards (if RX_pin is not defined), use the standard function.
   K_line.begin(baud);
+#endif
 }
 
 //Stops communication on the serial port

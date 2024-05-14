@@ -12,7 +12,7 @@
   <body>
     <article class="markdown-body"><h2 id="KLineKWP1281Lib"><a class="header-link" href="#KLineKWP1281Lib"></a>KLineKWP1281Lib</h2>
 <p><strong>KLineKWP1281Lib</strong> is a library designed for communicating with VAG control modules which use the proprietary VAG Key-Word 1281 protocol (KWP1281/KW1281), through an Arduino / ESP / RPi Pico development board.</p>
-<p><a href="https://github.com/domnulvlad/KLineKWP1281Lib"><img src=assets\gh.png alt="GitHub"></a></p>
+<p><a href="https://github.com/domnulvlad/KLineKWP1281Lib"><img src=assets\github_button.png alt="GitHub"></a></p>
 <h2 id="supported-features"><a class="header-link" href="#supported-features"></a>Supported features:</h2>
 <ul class="list">
 <li><strong>Ability to use any method to send and receive data</strong> (best being a hardware serial port, or software serial if an additional port is not available)</li>
@@ -21,17 +21,18 @@
 <li>Reading the module&#39;s part number + extra fields, coding, WSC</li>
 <li>Recoding</li>
 <li>Performing a login operation</li>
-<li>Reading stored fault codes and their elaboration</li>
+<li><strong>Reading stored fault codes and elaboration codes</strong></li>
+<li><strong>Converting fault/elaboration codes to strings</strong> (available in a few different languages)</li>
 <li>Clearing stored fault codes</li>
 <li>Reading, testing and saving an adaptation value</li>
-<li>Reading measuring blocks, calculating a measurement's value and providing its units (or text from a table, where applicable)
+<li><strong>Reading measuring blocks, calculating a measurement's value and providing its units, or displaying text from a table where applicable</strong> (available in a few different languages)</li>
 <li>Reading ROM / EEPROM (firmware)</li>
 <li>Performing actuator tests</li>
 <li>Performing basic settings</li>
 </ul>
 <h2 id="currently-unsupported-features"><a class="header-link" href="#currently-unsupported-features"></a>Currently unsupported features:</h2>
 <ul class="list">
-<li>Measurement / DTC labels or descriptions</li>
+<li>Multi-instance support for managing multiple K-lines at the same time</li>
 </ul>
 <h2 id="getting-started"><a class="header-link" href="#getting-started"></a>Getting started</h2>
 <p>Download <a href="https://github.com/domnulvlad/KLineKWP1281Lib/releases/latest">the latest release (.zip)</a> and <a href="https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries#importing-a-zip-library">add it to your Arduino IDE</a>.</p>
@@ -44,7 +45,7 @@
 <li><a href="https://github.com/mnaberez/vwradio/blob/main/kwp1281_tool/firmware/kwp1281.h">Mike Naberezny</a>, for more insight about the commands and parameters</li>
 </ul>
 <h2 id="contact"><a class="header-link" href="#contact"></a>Contact</h2>
-<p>For any inquiries, you can contact me at <a href="mailto:ne555timer@yahoo.com">ne555timer@yahoo.com</a>.</p>
+<p>For any inquiries, you can open an issue or contact me at <a href="mailto:ne555timer@yahoo.com">ne555timer@yahoo.com</a>.</p>
     </article>
   </body>
 </html>

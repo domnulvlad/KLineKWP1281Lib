@@ -29,9 +29,9 @@
       *K-line TX -> Serial1 - RX pin 19 / Serial2 - RX pin 17 / Serial3 - RX pin 15
       *K-line RX -> Serial1 - TX pin 18 / Serial2 - TX pin 16 / Serial3 - TX pin 14
 
-  ESP32
+  ESP32 / ESP32-C6
     *has one additional serial port
-    *pins:
+    *pins (they can be remapped, this is what they are configured to in these examples):
       *K-line TX -> RX pin 16
       *K-line RX -> TX pin 17
 
@@ -98,10 +98,6 @@ void KWP1281debugFunction(bool type, uint8_t sequence, uint8_t command, uint8_t*
 }
 #endif
 
-//You can increase the value below if you get "Too many faults for the given buffer size" during the DTC test.
-#define DTC_BUFFER_MAX_FAULT_CODES 16
-uint8_t faults[3 * DTC_BUFFER_MAX_FAULT_CODES]; //buffer to store the fault codes; each code takes 3 bytes
-
 void setup() {
   //Initialize the Serial Monitor.
   Serial.begin(115200);
@@ -132,15 +128,13 @@ void setup() {
   
   //Put the module's coding value into a string and pad with 0s to show 5 characters.
   char coding_str[6];
-  sprintf(coding_str, "%05u", diag.getCoding());
+  unsigned int coding = diag.getCoding();
+  sprintf(coding_str, "%05u", coding);
   
   //Put the module's wokshop code into a string and pad with 0s to show 5 characters.
   char WSC_str[6];
-  #if defined(__AVR__)
-    sprintf(WSC_str, "%05lu", diag.getWorkshopCode());
-  #else
-    sprintf(WSC_str, "%05u", diag.getWorkshopCode()); //uint32_t is not a "long" on the ESP platform
-  #endif
+  unsigned long WSC = diag.getWorkshopCode();
+  sprintf(WSC_str, "%05lu", WSC);
   
   //Leave an empty line.
   Serial.println();

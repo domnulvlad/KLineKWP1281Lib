@@ -8,8 +8,12 @@
   Notes:
     *You can change which block to read by modifying the #define below.
     *This block will be read continuously while the sketch is running.
-    *It is not necessary to maintain the connection with "diag.update();" in the loop, because any request will have the same effect (update() must be used in
-    periods of inactivity).
+    *It is not necessary to maintain the connection with "diag.update();" in the loop, because any request will have the same effect (update() must
+    be used in periods of inactivity).
+    *If you have manually disabled the text table by commenting out the line "#define KWP1281_TEXT_TABLE_SUPPORTED" in "KLineKWP1281Lib.h", the value
+    for some parameters will be displayed as "EN_f25".
+    *If you have the text table enabled, you can choose from a few different languages a bit further below in "KLineKWP1281Lib.h". Please only choose
+    one option.
 */
 
 //Change which block to read.

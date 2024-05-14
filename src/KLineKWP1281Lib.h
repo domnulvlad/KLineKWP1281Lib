@@ -8,6 +8,10 @@
 #define KWP1281_TEXT_TABLE_SUPPORTED
 //(if disabled, the string given to getMeasurementUnits() will contain "EN_f25" if that formula is encountered)
 
+//If the following line is commented out, fault code description strings are removed from the library (to save memory):
+//#define KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+//(if disabled, the string given to getFaultDescription() will contain "EN_dsc")
+
 //If the following line is commented out, fault code elaboration strings are removed from the library (to save memory):
 #define KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
 //(if disabled, the string given to getFaultElaboration() will contain "EN_elb")
@@ -18,16 +22,39 @@
 #include "units.h" //measurement unit strings
 
 #ifdef KWP1281_TEXT_TABLE_SUPPORTED
-  #include "text_table.h" //special text table, if enabled
+  //choose special text table language, if enabled:
+  
+  #include "text_table_EN.h"
+  //#include "text_table_DE.h"
+  //#include "text_table_PL.h"
+  //#include "text_table_RO.h"
+#endif
+
+#ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+  //choose fault code description text table language, if enabled:
+  
+  #include "fault_code_description_EN.h"
+  //#include "fault_code_description_DE.h"
+  //#include "fault_code_description_PL.h"
+  //#include "fault_code_description_RO.h"
 #endif
 
 #ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
-  #include "fault_code_elaboration.h" //fault code elaboration text table, if enabled
+  //choose fault code elaboration text table language, if enabled:
+  
+  #include "fault_code_elaboration_EN.h"
+  //#include "fault_code_elaboration_DE.h"
+  //#include "fault_code_elaboration_PL.h"
+  //#include "fault_code_elaboration_RO.h"
 #endif
 
 //AVR microcontrollers use 2-byte (word) pointers. Others use 4-byte (dword) pointers.
 #if defined(__AVR__)
   #define READ_POINTER_FROM_PROGMEM pgm_read_word_near
+  
+  #ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+    #warning Enabling fault code descriptions on AVR platforms may cause problems.
+  #endif
 #else
   #define READ_POINTER_FROM_PROGMEM pgm_read_dword_near
 #endif
@@ -121,10 +148,16 @@ class KLineKWP1281Lib
     executionStatus readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer = nullptr, size_t fault_code_buffer_size = 0);
     //Get a fault code from a fault code reading
     static uint16_t getFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
+    //Get a fault description string from a fault code reading
+    static char* getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size);
+    //Get the length of the description string from a fault code reading
+    static size_t getFaultDescriptionLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
     //Get a fault elaboration code from a fault code reading
     static uint8_t getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
     //Get a fault elaboration string from a fault code reading
     static char* getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size);
+    //Get the length of the elaboration string from a fault code reading
+    static size_t getFaultElaborationLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
     //Clear the module's fault codes
     executionStatus clearFaults();
     

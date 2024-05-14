@@ -7,6 +7,10 @@
 
   Notes:
     *Measuring blocks 0-255 will be read, after which the connection will be stopped.
+    *If you have manually disabled the text table by commenting out the line "#define KWP1281_TEXT_TABLE_SUPPORTED" in "KLineKWP1281Lib.h", the value
+    for some parameters will be displayed as "EN_f25".
+    *If you have the text table enabled, you can choose from a few different languages a bit further below in "KLineKWP1281Lib.h". Please only choose
+    one option.
 */
 
 /*

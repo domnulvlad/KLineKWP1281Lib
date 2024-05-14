@@ -514,7 +514,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::recode(uint16_t coding, uint32
   Notes:
     *The DTCs are stored in the following order: DTC_H, DTC_L, DTC_ELABORATION.
     *The functions getFaultCode() and getFaultElaborationCode() can be used to easily get the fault+elaboration codes stored in the buffer by readFaults().
-    *getFaultCode() and getFaultElaborationCode() are static functions so they do not require an instance to be used (useful in multi-instance applications).
+    *getFaultCode() and getFaultElaborationCode() are static functions so they do not require an instance to be used.
     
     *A possible implementation for displaying all fault+elaboration codes, after the buffer is filled by readFaults(), would be:
       ||//Navigate the list of fault codes.
@@ -644,7 +644,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_
     Provides a fault code from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *It is a static function so it does not require an instance to be used.
 */
 uint16_t KLineKWP1281Lib::getFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
@@ -665,6 +665,212 @@ uint16_t KLineKWP1281Lib::getFaultCode(uint8_t fault_code_index, uint8_t amount_
 
 /**
   Function:
+    getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+  
+  Parameters:
+    fault_code_index       -> index of the fault code whose description needs to be retrieved
+    amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
+    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
+    str[]                  -> string (character array) into which to copy the description string
+    string_size            -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    char* -> the same character array provided (str), to be able to use it like "Serial.println(getFaultDescription(...))"
+  
+  Description:
+    Provides a fault description string from a buffer filled by readFaults().
+  
+  Notes:
+    *It is a static function so it does not require an instance to be used.
+*/
+char* KLineKWP1281Lib::getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+{
+  //If the feature is enabled, copy the description into the given string.
+#ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+
+  //Determine the fault code.
+  uint16_t fault_code = getFaultCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+    
+  //This pointer will point to one of the strings stored in PROGMEM from "fault_code_description_xx.h", which will be copied into the given string.
+  const char* description_pointer = nullptr;
+  switch (fault_code)
+  {
+    case 0x82C5:
+      description_pointer = KWP_FAULT_82C5;
+      break;
+    case 0x8355:
+      description_pointer = KWP_FAULT_8355;
+      break;
+    case 0x8451:
+      description_pointer = KWP_FAULT_8451;
+      break;
+    case 0x8596:
+      description_pointer = KWP_FAULT_8596;
+      break;
+    case 0x85A6:
+      description_pointer = KWP_FAULT_85A6;
+      break;
+    case 0x8657:
+      description_pointer = KWP_FAULT_8657;
+      break;
+    case 0x865D:
+      description_pointer = KWP_FAULT_865D;
+      break;
+    case 0xFFFF:
+      description_pointer = KWP_FAULT_FFFF;
+      break;
+    default:
+      if (fault_code <= 0x1094)
+      {
+        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table1 + fault_code - 0x0000);
+      }
+      else if (fault_code >= 0x3FD8 && fault_code <= 0x3FF9)
+      {
+        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table2 + fault_code - 0x3FD8);
+      }
+      else if (fault_code >= 0xAFC8 && fault_code <= 0xB1AE)
+      {
+        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table3 + fault_code - 0xAFC8);
+      }
+      break;
+  }
+  
+  //If the description is valid, copy its string into the given array.
+  if (description_pointer)
+  {
+    //Copy the description string into the given array.
+    strncpy_P(str, (const char*)description_pointer, string_size);
+    
+    //Ensure the string is null-terminated.
+    if (string_size) {
+      str[string_size - 1] = '\0';
+    }
+  }
+  
+  //Otherwise, clear the string by writing a null on the first position.
+  else {
+    if (string_size) {
+      str[0] = '\0';
+    }
+  }
+
+#else
+  
+  (void)fault_code_index;
+  (void)amount_of_fault_codes;
+  (void)fault_code_buffer;
+  (void)fault_code_buffer_size;
+
+  //Otherwise, copy the "warning" into the given string.
+  strncpy(str, "EN_dsc", string_size);
+  
+  //Ensure the string is null-terminated.
+  if (string_size) {
+    str[string_size - 1] = '\0';
+  }
+  
+#endif
+  
+  //Return a pointer to the given array.
+  return str;
+}
+
+/**
+  Function:
+    getFaultDescriptionLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+  
+  Parameters:
+    fault_code_index       -> index of the fault code whose description needs to be retrieved
+    amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
+    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    size_t -> string length
+  
+  Description:
+    Provides the length of the fault description string from a buffer filled by readFaults().
+  
+  Notes:
+    *It is a static function so it does not require an instance to be used.
+*/
+size_t KLineKWP1281Lib::getFaultDescriptionLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+{
+  //If the feature is enabled, get the string length.
+#ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+
+  //Determine the fault code.
+  uint16_t fault_code = getFaultCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+    
+  //This pointer will point to one of the strings stored in PROGMEM from "fault_code_description_xx.h".
+  const char* description_pointer = nullptr;
+  switch (fault_code)
+  {
+    case 0x82C5:
+      description_pointer = KWP_FAULT_82C5;
+      break;
+    case 0x8355:
+      description_pointer = KWP_FAULT_8355;
+      break;
+    case 0x8451:
+      description_pointer = KWP_FAULT_8451;
+      break;
+    case 0x8596:
+      description_pointer = KWP_FAULT_8596;
+      break;
+    case 0x85A6:
+      description_pointer = KWP_FAULT_85A6;
+      break;
+    case 0x8657:
+      description_pointer = KWP_FAULT_8657;
+      break;
+    case 0x865D:
+      description_pointer = KWP_FAULT_865D;
+      break;
+    case 0xFFFF:
+      description_pointer = KWP_FAULT_FFFF;
+      break;
+    default:
+      if (fault_code <= 0x1094)
+      {
+        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table1 + fault_code - 0x0000);
+      }
+      else if (fault_code >= 0x3FD8 && fault_code <= 0x3FF9)
+      {
+        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table2 + fault_code - 0x3FD8);
+      }
+      else if (fault_code >= 0xAFC8 && fault_code <= 0xB1AE)
+      {
+        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table3 + fault_code - 0xAFC8);
+      }
+      break;
+  }
+  
+  //If the description is valid, return its length.
+  if (description_pointer)
+  {
+    return strlen_P((const char*)description_pointer);
+  }
+
+#else
+  
+  (void)fault_code_index;
+  (void)amount_of_fault_codes;
+  (void)fault_code_buffer;
+  (void)fault_code_buffer_size;
+  
+  //If the feature is not enabled, return the length of the "warning";
+  return strlen("EN_dsc");
+  
+#endif
+  
+  //If the function got here, an error occurred, so return 0.
+  return 0;
+}
+
+/**
+  Function:
     getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size)
   
   Parameters:
@@ -680,7 +886,7 @@ uint16_t KLineKWP1281Lib::getFaultCode(uint8_t fault_code_index, uint8_t amount_
     Provides a fault elaboration code from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *It is a static function so it does not require an instance to be used.
 */
 uint8_t KLineKWP1281Lib::getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
@@ -697,7 +903,6 @@ uint8_t KLineKWP1281Lib::getFaultElaborationCode(uint8_t fault_code_index, uint8
   //Return the elaboration code.
   return fault_code_buffer[3 * fault_code_index + 2];
 }
-
 
 /**
   Function:
@@ -719,7 +924,7 @@ uint8_t KLineKWP1281Lib::getFaultElaborationCode(uint8_t fault_code_index, uint8
     Provides a fault elaboration string from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *It is a static function so it does not require an instance to be used.
 */
 char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
 {
@@ -734,10 +939,11 @@ char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_
   
   //If the feature is enabled, copy the elaboration into the given string.
 #ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
+
   //If the elaboration code is valid, copy its string into the given array.
-  if (elaboration_code < (sizeof(fault_elaborations) / sizeof(fault_elaborations[0]))) {
+  if (elaboration_code < (sizeof(fault_elaboration_table) / sizeof(fault_elaboration_table[0]))) {
     //Copy the elaboration string into the given array.
-    strncpy_P(str, (const char*)READ_POINTER_FROM_PROGMEM(fault_elaborations + elaboration_code), string_size);
+    strncpy_P(str, (const char*)READ_POINTER_FROM_PROGMEM(fault_elaboration_table + elaboration_code), string_size);
     
     //Ensure the string is null-terminated.
     if (string_size) {
@@ -751,7 +957,9 @@ char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_
       str[0] = '\0';
     }
   }
+  
 #else
+  
   //Otherwise, copy the "warning" into the given string.
   strncpy(str, "EN_elb", string_size);
   
@@ -759,10 +967,65 @@ char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_
   if (string_size) {
     str[string_size - 1] = '\0';
   }
+  
 #endif
   
   //Return a pointer to the given array.
   return str;
+}
+
+/**
+  Function:
+    getFaultElaborationLength(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+  
+  Parameters:
+    is_intermittent        -> whether or not the elaboration code indicated that the fault is "Intermittent"
+    fault_code_index       -> index of the fault code whose elaboration needs to be retrieved
+    amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
+    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
+    str[]                  -> string (character array) into which to copy the elaboration string
+    string_size            -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    size_t -> string length
+  
+  Description:
+    Provides the length of the fault elaboration string from a buffer filled by readFaults().
+  
+  Notes:
+    *It is a static function so it does not require an instance to be used.
+*/
+size_t KLineKWP1281Lib::getFaultElaborationLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+{  
+  //If the feature is enabled, get the string length.
+#ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
+
+  //Determine the elaboration code.
+  uint8_t elaboration_code = getFaultElaborationCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+
+  //Ensure the high bit is not set.
+  elaboration_code &= ~0x80;
+  
+  //If the elaboration code is valid, return its length.
+  if (elaboration_code < (sizeof(fault_elaboration_table) / sizeof(fault_elaboration_table[0]))) {
+    return strlen_P((const char*)READ_POINTER_FROM_PROGMEM(fault_elaboration_table + elaboration_code));
+  }
+  
+#else
+  
+  (void)fault_code_index;
+  (void)amount_of_fault_codes;
+  (void)fault_code_buffer;
+  (void)fault_code_buffer_size;
+  
+  //If the feature is not enabled, return the length of the "warning";
+  return strlen("EN_elb");
+  
+#endif
+  
+  //If the function got here, an error occurred, so return 0.
+  return 0;
 }
 
 /**
@@ -1032,7 +1295,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
     Provides a measured value from a buffer filled by basicSetting().
   
   Notes:
-    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *It is a static function so it does not require an instance to be used.
 */
 uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amount_of_values, uint8_t* basic_setting_buffer, size_t basic_setting_buffer_size)
 {
@@ -1073,7 +1336,7 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
   Notes:
     *The measurements are stored in the following order: FORMULA, BYTE_A, BYTE_B.
     *The getMeasurementValue() function can be used to easily get the calculated values stored in the buffer by readGroup().
-    *getMeasurementValue() is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *getMeasurementValue() is a static function so it does not require an instance to be used.
     
     *A possible implementation for displaying all measurements from a group would be:
       ||//Create a character array which will hold the measurement's units
@@ -1175,7 +1438,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
     *Even if the measurement is of type UNITS, its value still contains the "origin" of the units string, like a code or 16-bit value so it can be used without
     necessarily checking the units string.
     *For example, for a clock measurement, the units string will contain "hh:mm", but the value will also be hh.mm (hours before decimal, minutes after).
-    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *It is a static function so it does not require an instance to be used.
 */
 KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
@@ -1230,7 +1493,7 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t mea
     Calculates the actual value of a measurement from a buffer filled by readGroup().
   
   Notes:
-    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *It is a static function so it does not require an instance to be used.
 */
 float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
@@ -1253,9 +1516,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
   float a = a_raw, b = b_raw;
   
   /*
-    Slight inaccuracy on mass flow - 19, 35, 96.
-    Text table not yet retrieved - 25, 7B.
-    Formula unknown - 48, 6E, 8B, 8C, 8D, 93.
+    Formula unknown - 6E, 8B, 8C, 8D, 93.
     Meaning unknown - A0.
   */
   
@@ -1287,7 +1548,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x16: result = a * b * 0.001;                                                                         break; //Time                [ms]
     case 0x17: result = a * b / 256.0;                                                                         break; //Duty cycle          [%]
     case 0x18: result = a * b * 0.001;                                                                         break; //Current             [A]
-    case 0x19: result = a / 180.0 + b * 1.422;                                                                 break; //Mass flow           [g/s]
+    case 0x19: result = (float)((b_raw << 8) | a_raw) * 0.00555555;                                            break; //Mass flow           [g/s]
     case 0x1A: result = b - a;                                                                                 break; //Temperature         [degC]
     case 0x1B: result = a * abs(b - 0x80) * 0.01;                                                              break; //Ignition angle      [deg]
     case 0x1C: result = b - a;                                                                                 break; //N/A                 [N/A]
@@ -1315,7 +1576,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x32: result = a ? ((b - 0x80) * 100.0 / a) : 0;                                                      break; //Pressure            [mbar]
     case 0x33: result = a * (b - 0x80) / 255.0;                                                                break; //Injection quantity  [mg/h]
     case 0x34: result = a * b * 0.02 - a;                                                                      break; //Torque              [Nm]
-    case 0x35: result = a * 5.58 / 1000.0 + (b - 0x80) * 1.422;                                                break; //Mass flow           [g/s]
+    case 0x35: result = (((b_raw << 8) | a_raw) - 32768) * 0.00555555;                                         break; //Mass flow           [g/s]
     case 0x36: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Count               [N/A]
     case 0x37: result = a * b / 200.0;                                                                         break; //Time                [s]
     case 0x38: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Workshop code       [N/A]
@@ -1329,25 +1590,95 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x40: result = a + b;                                                                                 break; //Resistance          [Ohm]
     case 0x41: result = a * (b - 0x7F) * 0.01;                                                                 break; //Distance            [mm]
     case 0x42: result = (a * b) / 512.0;                                                                       break; //Voltage             [V]
-    case 0x43: result = ((a_raw % 4) - 4 * (a >= 0x80)) * 640.0 + b * 2.5;                                     break; //Steering angle      [deg]
-    case 0x44: result = ((a_raw % 4) - 4 * (a >= 0x80)) * 34.763 + b * 0.1358;                                 break; //Turn rate           [deg/s]
-    case 0x45: result = ((a_raw % 4) - 4 * (a >= 0x80)) * 83.33 + b * 0.3254;                                  break; //Pressure            [bar]
-    case 0x46: result = ((a_raw % 4) - 4 * (a >= 0x80)) * 49.15 + b * 0.192;                                   break; //Acceleration        [m/s^2]
+    case 0x43:                                                                                                        //Steering angle      [deg]
+    {
+      int16_t word = (a_raw << 8) | b_raw;
+      if (word & 0x8000)
+      {
+        word |= 0x7C00;
+      }
+      else
+      {
+        word &= 0x83FF;
+      }
+      
+      result = word * 2.5;
+    }
+    break;
+    case 0x44:                                                                                                        //Turn rate           [deg/s]
+    {
+      int16_t word = (a_raw << 8) | b_raw;
+      if (word & 0x8000)
+      {
+        word |= 0x7C00;
+      }
+      else
+      {
+        word &= 0x83FF;
+      }
+      
+      result = word * 0.1358;
+    }
+    break;
+    case 0x45:                                                                                                        //Pressure            [bar]
+    {
+      int16_t word = (a_raw << 8) | b_raw;
+      if (word & 0x8000)
+      {
+        word |= 0x7C00;
+      }
+      else
+      {
+        word &= 0x83FF;
+      }
+      
+      result = word * 0.3255;
+    }
+    break;
+    case 0x46:                                                                                                        //Acceleration        [m/s^2]
+    {
+      int16_t word = (a_raw << 8) | b_raw;
+      if (word & 0x8000)
+      {
+        word |= 0x7C00;
+      }
+      else
+      {
+        word &= 0x83FF;
+      }
+      
+      result = word * 0.192;
+    }
+    break;
     case 0x47: result = a * b;                                                                                 break; //Distance            [cm]
-    //0x48 - unknown formula (Voltage [V])
+    case 0x48: result = (((211 - a_raw) * b) + (a_raw * 255)) * 0.0002450980392156863;                         break; //Voltage             [V]
     case 0x49: result = a * b * 0.01;                                                                          break; //Resistance          [Ohm]
     case 0x4A: result = a * b * 0.1;                                                                           break; //Time                [months]
     case 0x4B: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Error code          [N/A]
     case 0x4C: result = uint16_t((a_raw << 8) | b_raw) - a;                                                    break; //Resistance          [kOhm]
-    case 0x4D: result = a * 0.062745 + b * 0.0147;                                                             break; //Voltage             [V]
+    case 0x4D: result = ((a_raw << 8) + (b_raw * 60)) * 0.000245098039215686;                                  break; //Voltage             [V]
     case 0x4E: result = int8_t(b) * 1.819;                                                                     break; //Misfires            [/s]
     case 0x4F: result = b;                                                                                     break; //Channel number      [N/A]
     case 0x50: result = uint16_t((a_raw << 8) | b_raw) * 0.01;                                                 break; //Resistance          [kOhm]
-    case 0x51: result = ((a_raw << 8) | b_raw) * 4375.0 * 0.00001;                                             break; //Steering angle      [deg]
-    case 0x52: result = ((a_raw << 8) | b_raw) * 981.0 * 0.00001;                                              break; //Acceleration        [m/s^2]
+    case 0x51: result = ((a_raw << 8) | b_raw) * 0.04375;                                                      break; //Steering angle      [deg]
+    case 0x52: result = ((a_raw << 8) | b_raw) * 0.00981;                                                      break; //Acceleration        [m/s^2]
     case 0x53: result = ((a_raw << 8) | b_raw) * 0.01;                                                         break; //Pressure            [bar]
-    case 0x54: result = (b * 973.0 * 0.0001) - ((a < 0x80) ? 0 : 24.909);                                      break; //Acceleration        [m/s^2]
-    case 0x55: result = ((a_raw << 8) | b_raw) / 349.0;                                                        break; //Turn rate           [deg/s]
+    case 0x54:                                                                                                        //Acceleration        [m/s^2]
+    {
+      int16_t word = (a_raw << 8) | b_raw;
+      if (word & 0x8000)
+      {
+        word |= 0x7F00;
+      }
+      else
+      {
+        word &= 0xFF;
+      }
+      
+      result = word * 0.0973;
+    }
+    break;
+    case 0x55: result = ((a_raw << 8) | b_raw) * 0.002865;                                                     break; //Turn rate           [deg/s]
     case 0x56: result = a * b * 0.1;                                                                           break; //Current             [A]
     case 0x57: result = a * (b - 0x80) * 0.1;                                                                  break; //Turn rate           [deg/s]
     case 0x58: result = a * b * 0.01;                                                                          break; //Resistance          [kOhm]
@@ -1414,7 +1745,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     //0x93 - unknown formula (Inclination [%])
     case 0x94: result = a * (b - 0x80) / 4.0;                                                                  break; //Slip RPM            [N/A]
     case 0x95: result = a * (b - 100) * 0.1;                                                                   break; //Temperature         [degC]
-    case 0x96: result = a * 0.005568 + b * 1.422;                                                              break; //Mass flow           [g/s]
+    case 0x96: result = (float)((b_raw << 8) | a_raw) * 0.00555555;                                            break; //Mass flow           [g/s]
     case 0x97: result = a * (b - 0x80) * 0.01;                                                                 break; //Idle correction     [degKW]
     case 0x98: result = a * b / 40.0;                                                                          break; //Air mass per stroke [mg/h]
     case 0x99: result = a * (b - 0x80) / 256.0;                                                                break; //Injection quantity  [mg/h]
@@ -1471,7 +1802,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     Provides a string containing the proper units for a measurement from a buffer filled by readGroup().
   
   Notes:
-    *It is a static function so it does not require an instance to be used (useful in multi-instance applications).
+    *It is a static function so it does not require an instance to be used.
 */
 char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size)
 {
@@ -1494,7 +1825,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
   uint8_t b       = measurement_buffer[3 * measurement_index + 2];
   
   //Pointer which will point to one of the strings stored in PROGMEM from "units.h", which will be copied into the given string.
-  const char* unit_pointer;
+  const char* unit_pointer = nullptr;
   
   switch (formula) {
     case 0x01:
@@ -1867,13 +2198,12 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
         #ifdef KWP1281_TEXT_TABLE_SUPPORTED
           uint16_t code = (a << 8) | b;
           
-          if (code >= 1 && code <= 0x065E) {
-            unit_pointer = (const char*)READ_POINTER_FROM_PROGMEM(formula_string_table + code - 1);
+          if (code < (sizeof(formula_string_table) / sizeof(formula_string_table[0])))
+          {
+            unit_pointer = (const char*)READ_POINTER_FROM_PROGMEM(formula_string_table + code);
           }
-          else if (code >= 0x0668 && code <= 0x066C) {
-            unit_pointer = (const char*)READ_POINTER_FROM_PROGMEM(formula_string_table + code - 10);
-          }
-          else {
+          
+          if (!unit_pointer) {
             if (string_size) {
               str[0] = '\0';
             }
