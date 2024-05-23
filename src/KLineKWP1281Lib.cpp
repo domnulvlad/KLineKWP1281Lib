@@ -2559,7 +2559,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
   //Extract the received coding value and workshop code.
   if (_receive_buffer[0] == 5) {
     identification_data.coding = ((_receive_buffer[2] << 8) | _receive_buffer[3]) >> 1;
-    identification_data.workshop_code = (uint32_t(_receive_buffer[3] & 0x01) << 16) | (_receive_buffer[4] << 8) | _receive_buffer[5];
+    identification_data.workshop_code = (uint32_t(_receive_buffer[3] & 0x01) << 16) | uint16_t(_receive_buffer[4] << 8) | _receive_buffer[5];
   }
   //A control module may send a coding+WSC field with a data length of 1 instead of 5, which means coding is not supported, or may send an acknowledgement.
   else {
