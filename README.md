@@ -16,9 +16,7 @@
 - Reading ROM / EEPROM (firmware)
 - Performing actuator tests
 - Performing basic settings
-
-## Currently unsupported features:
-- Multi-instance support for managing multiple K-lines at the same time
+- Implied multi-instance support for managing multiple K-lines at the same time by using a multitasking-capable platform (ESP32 example included)
 
 ## Getting started
 Download [the latest release (.zip)](https://github.com/domnulvlad/KLineKWP1281Lib/releases/latest) and [add it to your Arduino IDE](https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries#importing-a-zip-library).
