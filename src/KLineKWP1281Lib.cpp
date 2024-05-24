@@ -1417,13 +1417,134 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
 
 /**
   Function:
-    getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
   
   Parameters:
     measurement_index       -> index of the measurement whose type must be determined (0-4)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
     measurement_buffer[]    -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    uint8_t -> formula byte
+  
+  Description:
+    Retrieves the formula byte for a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *Each measurement has 3 bytes. Formula is the first byte. They can be used for the getMeasurementType(), getMeasurementValue() and getMeasurementUnits()
+    functions instead of giving the entire measurement buffer.
+    *It is a static function so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+{
+  // Check if the array is large enough to contain as many measurements as "declared" by the value given.
+  if (measurement_buffer_size < amount_of_measurements * 3)
+  {
+    amount_of_measurements = measurement_buffer_size / 3;
+  }
+
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return 0;
+  }
+
+  // Get the formula from the buffer based on the requested index.
+  return measurement_buffer[3 * measurement_index];
+}
+
+/**
+  Function:
+    getByteA(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+  
+  Parameters:
+    measurement_index       -> index of the measurement whose type must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    uint8_t -> byte A
+  
+  Description:
+    Retrieves byte A for a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *Each measurement has 3 bytes. Byte A is the second byte. They can be used for the getMeasurementType(), getMeasurementValue() and getMeasurementUnits()
+    functions instead of giving the entire measurement buffer.
+    *It is a static function so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getByteA(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+{
+  // Check if the array is large enough to contain as many measurements as "declared" by the value given.
+  if (measurement_buffer_size < amount_of_measurements * 3)
+  {
+    amount_of_measurements = measurement_buffer_size / 3;
+  }
+
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return 0;
+  }
+
+  // Get byte_a from the buffer based on the requested index.
+  return measurement_buffer[3 * measurement_index + 1];
+}
+
+/**
+  Function:
+    getByteB(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+  
+  Parameters:
+    measurement_index       -> index of the measurement whose type must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    uint8_t -> byte B
+  
+  Description:
+    Retrieves byte B for a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *Each measurement has 3 bytes. Byte B is the third byte. They can be used for the getMeasurementType(), getMeasurementValue() and getMeasurementUnits()
+    functions instead of giving the entire measurement buffer.
+    *It is a static function so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getByteB(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+{
+  // Check if the array is large enough to contain as many measurements as "declared" by the value given.
+  if (measurement_buffer_size < amount_of_measurements * 3)
+  {
+    amount_of_measurements = measurement_buffer_size / 3;
+  }
+
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return 0;
+  }
+
+  // Get byte_b from the buffer based on the requested index.
+  return measurement_buffer[3 * measurement_index + 2];
+}
+
+/**
+  Function:
+    getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    getMeasurementType(uint8_t formula)
+  
+  Parameters (1):
+    measurement_index       -> index of the measurement whose type must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    formula -> byte returned by getFormula()
   
   Returns:
     measurementType ->
@@ -1455,6 +1576,12 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t mea
   //Determine the formula based on the given index.
   uint8_t formula = measurement_buffer[3 * measurement_index];
   
+  //Use the other function.
+  return getMeasurementType(formula);
+}
+
+KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t formula)
+{
   //Only a few measurement formulas are of the "UNITS" type.
   switch (formula) {
     case 0x0A:
@@ -1479,12 +1606,18 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t mea
 /**
   Function:
     getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    getMeasurementValue(uint8_t formula, uint8_t byte_a, uint8_t byte_b)
   
-  Parameters:
+  Parameters (1):
     measurement_index       -> index of the measurement that needs to be calculated (0-3)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
     measurement_buffer[]    -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    formula -> byte returned by getFormula()
+    byte_a  -> byte returned by getByteA()
+    byte_b  -> byte returned by getByteB()
   
   Returns:
     float -> calculated value
@@ -1508,12 +1641,18 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
   }
   
   //Get the three important values from the buffer based on the requested index.
-  uint8_t formula  = measurement_buffer[3 * measurement_index];
-  uint8_t a_raw    = measurement_buffer[3 * measurement_index + 1];
-  uint8_t b_raw    = measurement_buffer[3 * measurement_index + 2];
+  uint8_t formula = measurement_buffer[3 * measurement_index];
+  uint8_t byte_a  = measurement_buffer[3 * measurement_index + 1];
+  uint8_t byte_b  = measurement_buffer[3 * measurement_index + 2];
   
+  //Use the other function.
+  return getMeasurementValue(formula, byte_a, byte_b);
+}
+
+float KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t byte_a, uint8_t byte_b)
+{
   //Convert the values to floating point for use in formulas.
-  float a = a_raw, b = b_raw;
+  float a = byte_a, b = byte_b;
   
   /*
     Formula unknown - 6E, 8B, 8C, 8D, 93.
@@ -1539,8 +1678,8 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x0D: result = a * (b - 0x7F) * 0.001;                                                                break; //Distance            [mm]
     case 0x0E: result = a * b * 0.005;                                                                         break; //Pressure            [bar]
     case 0x0F: result = a * b * 0.01;                                                                          break; //Injection time      [ms]
-    case 0x10: result = b_raw & a_raw;                                                                         break; //Binary bits         [bin(b&a)]
-    case 0x11: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //ASCII               [char(a)char(b)]
+    case 0x10: result = byte_b & byte_a;                                                                       break; //Binary bits         [bin(b&a)]
+    case 0x11: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //ASCII               [char(a)char(b)]
     case 0x12: result = a * b * 0.04;                                                                          break; //Pressure            [mbar]
     case 0x13: result = a * b * 0.01;                                                                          break; //Fuel volume         [l]
     case 0x14: result = a * (b - 0x80) / 128.0;                                                                break; //Deviation           [%]
@@ -1548,7 +1687,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x16: result = a * b * 0.001;                                                                         break; //Time                [ms]
     case 0x17: result = a * b / 256.0;                                                                         break; //Duty cycle          [%]
     case 0x18: result = a * b * 0.001;                                                                         break; //Current             [A]
-    case 0x19: result = (float)((b_raw << 8) | a_raw) * 0.00555555;                                            break; //Mass flow           [g/s]
+    case 0x19: result = (float)((byte_b << 8) | byte_a) * 0.00555555;                                          break; //Mass flow           [g/s]
     case 0x1A: result = b - a;                                                                                 break; //Temperature         [degC]
     case 0x1B: result = a * abs(b - 0x80) * 0.01;                                                              break; //Ignition angle      [deg]
     case 0x1C: result = b - a;                                                                                 break; //N/A                 [N/A]
@@ -1559,8 +1698,8 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x21: result = a ? (100.0 * b / float(a)) : 0;                                                        break; //Load                [%]
     case 0x22: result = a * (b - 0x80) * 0.01;                                                                 break; //Idle correction     [KW]
     case 0x23: result = a * b * 0.01;                                                                          break; //Consumption         [l/h]
-    case 0x24: result = uint16_t((a_raw << 8) | b_raw) * 10.0;                                                 break; //Mileage             [km]
-    case 0x25: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Text                [strings from table]
+    case 0x24: result = uint16_t((byte_a << 8) | byte_b) * 10.0;                                               break; //Mileage             [km]
+    case 0x25: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Text                [strings from table]
     case 0x26: result = a * (b - 0x80) * 0.001;                                                                break; //Segment correction  [degKW]
     case 0x27: result = a * b / 255.0;                                                                         break; //Injection quantity  [mg/h]
     case 0x28: result = a * 25.5 + b * 0.1 - 400.0;                                                            break; //Current             [A]
@@ -1576,14 +1715,14 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x32: result = a ? ((b - 0x80) * 100.0 / a) : 0;                                                      break; //Pressure            [mbar]
     case 0x33: result = a * (b - 0x80) / 255.0;                                                                break; //Injection quantity  [mg/h]
     case 0x34: result = a * b * 0.02 - a;                                                                      break; //Torque              [Nm]
-    case 0x35: result = (((b_raw << 8) | a_raw) - 32768) * 0.00555555;                                         break; //Mass flow           [g/s]
-    case 0x36: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Count               [N/A]
+    case 0x35: result = (((byte_b << 8) | byte_a) - 32768) * 0.00555555;                                       break; //Mass flow           [g/s]
+    case 0x36: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Count               [N/A]
     case 0x37: result = a * b / 200.0;                                                                         break; //Time                [s]
-    case 0x38: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Workshop code       [N/A]
-    case 0x39: result = uint16_t((a_raw << 8) | b_raw) + 65536;                                                break; //Workshop code       [N/A]
+    case 0x38: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Workshop code       [N/A]
+    case 0x39: result = uint16_t((byte_a << 8) | byte_b) + 65536;                                              break; //Workshop code       [N/A]
     case 0x3A: result = b * 260.9 / 255.0;                                                                     break; //Misfires            [/s]
-    case 0x3B: result = uint16_t((a_raw << 8) | b_raw) * 2.0 / 65535.0;                                        break; //N/A                 [N/A]
-    case 0x3C: result = uint16_t((a_raw << 8) | b_raw) * 0.01;                                                 break; //Time                [s]
+    case 0x3B: result = uint16_t((byte_a << 8) | byte_b) * 2.0 / 65535.0;                                      break; //N/A                 [N/A]
+    case 0x3C: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //Time                [s]
     case 0x3D: result = a ? ((b - 0x80) / float(a)) : 0;                                                       break; //Difference          [N/A]
     case 0x3E: result = a * b * 0.256;                                                                         break; //Time                [s]
     //0x3F - doesn't exist
@@ -1592,7 +1731,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x42: result = (a * b) / 512.0;                                                                       break; //Voltage             [V]
     case 0x43:                                                                                                        //Steering angle      [deg]
     {
-      int16_t word = (a_raw << 8) | b_raw;
+      int16_t word = (byte_a << 8) | byte_b;
       if (word & 0x8000)
       {
         word |= 0x7C00;
@@ -1607,7 +1746,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     break;
     case 0x44:                                                                                                        //Turn rate           [deg/s]
     {
-      int16_t word = (a_raw << 8) | b_raw;
+      int16_t word = (byte_a << 8) | byte_b;
       if (word & 0x8000)
       {
         word |= 0x7C00;
@@ -1622,7 +1761,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     break;
     case 0x45:                                                                                                        //Pressure            [bar]
     {
-      int16_t word = (a_raw << 8) | b_raw;
+      int16_t word = (byte_a << 8) | byte_b;
       if (word & 0x8000)
       {
         word |= 0x7C00;
@@ -1637,7 +1776,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     break;
     case 0x46:                                                                                                        //Acceleration        [m/s^2]
     {
-      int16_t word = (a_raw << 8) | b_raw;
+      int16_t word = (byte_a << 8) | byte_b;
       if (word & 0x8000)
       {
         word |= 0x7C00;
@@ -1651,21 +1790,21 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     }
     break;
     case 0x47: result = a * b;                                                                                 break; //Distance            [cm]
-    case 0x48: result = (((211 - a_raw) * b) + (a_raw * 255)) * 0.0002450980392156863;                         break; //Voltage             [V]
+    case 0x48: result = (((211 - byte_a) * b) + (byte_a * 255)) * 0.0002450980392156863;                       break; //Voltage             [V]
     case 0x49: result = a * b * 0.01;                                                                          break; //Resistance          [Ohm]
     case 0x4A: result = a * b * 0.1;                                                                           break; //Time                [months]
-    case 0x4B: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Error code          [N/A]
-    case 0x4C: result = uint16_t((a_raw << 8) | b_raw) - a;                                                    break; //Resistance          [kOhm]
-    case 0x4D: result = ((a_raw << 8) + (b_raw * 60)) * 0.000245098039215686;                                  break; //Voltage             [V]
+    case 0x4B: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Error code          [N/A]
+    case 0x4C: result = uint16_t((byte_a << 8) | byte_b) - a;                                                  break; //Resistance          [kOhm]
+    case 0x4D: result = ((byte_a << 8) + (byte_b * 60)) * 0.000245098039215686;                                break; //Voltage             [V]
     case 0x4E: result = int8_t(b) * 1.819;                                                                     break; //Misfires            [/s]
     case 0x4F: result = b;                                                                                     break; //Channel number      [N/A]
-    case 0x50: result = uint16_t((a_raw << 8) | b_raw) * 0.01;                                                 break; //Resistance          [kOhm]
-    case 0x51: result = ((a_raw << 8) | b_raw) * 0.04375;                                                      break; //Steering angle      [deg]
-    case 0x52: result = ((a_raw << 8) | b_raw) * 0.00981;                                                      break; //Acceleration        [m/s^2]
-    case 0x53: result = ((a_raw << 8) | b_raw) * 0.01;                                                         break; //Pressure            [bar]
+    case 0x50: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //Resistance          [kOhm]
+    case 0x51: result = ((byte_a << 8) | byte_b) * 0.04375;                                                    break; //Steering angle      [deg]
+    case 0x52: result = ((byte_a << 8) | byte_b) * 0.00981;                                                    break; //Acceleration        [m/s^2]
+    case 0x53: result = ((byte_a << 8) | byte_b) * 0.01;                                                       break; //Pressure            [bar]
     case 0x54:                                                                                                        //Acceleration        [m/s^2]
     {
-      int16_t word = (a_raw << 8) | b_raw;
+      int16_t word = (byte_a << 8) | byte_b;
       if (word & 0x8000)
       {
         word |= 0x7F00;
@@ -1678,11 +1817,11 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
       result = word * 0.0973;
     }
     break;
-    case 0x55: result = ((a_raw << 8) | b_raw) * 0.002865;                                                     break; //Turn rate           [deg/s]
+    case 0x55: result = ((byte_a << 8) | byte_b) * 0.002865;                                                   break; //Turn rate           [deg/s]
     case 0x56: result = a * b * 0.1;                                                                           break; //Current             [A]
     case 0x57: result = a * (b - 0x80) * 0.1;                                                                  break; //Turn rate           [deg/s]
     case 0x58: result = a * b * 0.01;                                                                          break; //Resistance          [kOhm]
-    case 0x59: result = uint16_t(a_raw << 8) | b_raw;                                                          break; //On-time             [h]
+    case 0x59: result = uint16_t(byte_a << 8) | byte_b;                                                        break; //On-time             [h]
     case 0x5A: result = a * b * 0.1;                                                                           break; //Weight              [kg]
     case 0x5B: result = a * (b - 0x80) * 0.1;                                                                  break; //Steering angle      [deg]
     case 0x5C: result = a * b;                                                                                 break; //Mileage             [km]
@@ -1692,7 +1831,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x60: result = a * b * 0.1;                                                                           break; //Pressure            [mbar]
     case 0x61: result = (b - a) * 5;                                                                           break; //Cat-temperature     [degC]
     case 0x62: result = a * b * 0.1;                                                                           break; //Impulses            [/km]
-    case 0x63: result = (a_raw << 8) | b_raw;                                                                  break; //N/A                 [N/A]
+    case 0x63: result = (byte_a << 8) | byte_b;                                                                break; //N/A                 [N/A]
     case 0x64: result = a * b * 0.1;                                                                           break; //Pressure            [bar]
     case 0x65: result = a * b * 0.001;                                                                         break; //Fuel level factor   [l/mm]
     case 0x66: result = a * b * 0.1;                                                                           break; //Fuel level          [mm]
@@ -1700,7 +1839,7 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x68: result = a * (b - 0x80) / 5.0;                                                                  break; //Volume              [ml]
     case 0x69: result = a * (b - 0x80) * 0.01;                                                                 break; //Distance            [m]
     case 0x6A: result = a * (b - 0x80) * 0.1;                                                                  break; //Speed               [km/h]
-    case 0x6B: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Hex bytes           [hex(a)hex(b)]
+    case 0x6B: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Hex bytes           [hex(a)hex(b)]
     //0x6C - doesn't exist
     //0x6D - doesn't exist
     //0x6E - unknown formula (Workshop ID [N/A])
@@ -1708,21 +1847,21 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x70: result = a * (b - 0x80) * 0.001;                                                                break; //Angle               [deg]
     case 0x71: result = a * (b - 0x80) * 0.01;                                                                 break; //N/A                 [N/A]
     case 0x72: result = a * (b - 0x80);                                                                        break; //Altitude            [m]
-    case 0x73: result = (a_raw << 8) | b_raw;                                                                  break; //Output power        [W]
-    case 0x74: result = (a_raw << 8) | b_raw;                                                                  break; //RPM                 [/min]
+    case 0x73: result = (byte_a << 8) | byte_b;                                                                break; //Output power        [W]
+    case 0x74: result = (byte_a << 8) | byte_b;                                                                break; //RPM                 [/min]
     case 0x75: result = a * (b - 64) * 0.01;                                                                   break; //Temperature         [degC]
     //0x76 - shows min(a, length) bytes from the entire contents of block response as HEX values
     case 0x77: result = a * b * 0.01;                                                                          break; //ACC-Amplitude       [%]
     case 0x78: result = a * b * 1.411752;                                                                      break; //Angle               [deg]
     case 0x79: result = a * 5.0 * 0.1 + b * 128.0;                                                             break; //N/A                 [N/A]
     case 0x7A: result = a * 0.01 + (b - 0x80) * 256.0 * 0.01;                                                  break; //N/A                 [N/A]
-    case 0x7B: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Text                [strings from table]
+    case 0x7B: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Text                [strings from table]
     case 0x7C: result = a * b * 0.1;                                                                           break; //Current             [mA]
     case 0x7D: result = a - b;                                                                                 break; //Attenuation         [dB]
     case 0x7E: result = a * b * 0.1;                                                                           break; //N/A                 [N/A]
-    case 0x7F: result = 200000 + (b_raw & 0x7F) * 100                                                                 //Date                [yyyy:mm:dd]
-                       + (((a_raw & 0x07) << 1) | ((b_raw & 0x80) >> 7))
-                       + ((a_raw & 0xF8) >> 3) * 0.01;                                                         break; 
+    case 0x7F: result = 200000 + (byte_b & 0x7F) * 100                                                                 //Date                [yyyy:mm:dd]
+                       + (((byte_a & 0x07) << 1) | ((byte_b & 0x80) >> 7))
+                       + ((byte_a & 0xF8) >> 3) * 0.01;                                                        break; 
     case 0x80: result = a * b;                                                                                 break; //RPM                 [/min]
     case 0x81: result = a * b / 256.0;                                                                         break; //Load                [%]
     case 0x82: result = a * b / 2560.0;                                                                        break; //Current             [A]
@@ -1731,13 +1870,13 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0x85: result = a * b / 256.0;                                                                         break; //Voltage             [V]
     case 0x86: result = a * b;                                                                                 break; //Speed               [km/h]
     case 0x87: result = a * b;                                                                                 break; //N/A                 [N/A]
-    case 0x88: result = b_raw & a_raw;                                                                         break; //Binary bits         [bin(b&a)]
+    case 0x88: result = byte_b & byte_a;                                                                       break; //Binary bits         [bin(b&a)]
     case 0x89: result = a * b * 0.01;                                                                          break; //Injection time      [ms]
     case 0x8A: result = a * b * 0.001;                                                                         break; //Knock sensor        [V]
     //0x8B - unknown formula (RPM [/min])
     //0x8C - unknown formula (Temperature [degC])
     //0x8D - text from unknown source
-    case 0x8E: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //ASCII               [char(a)char(b)]
+    case 0x8E: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //ASCII               [char(a)char(b)]
     case 0x8F: result = a * (b - 0x80) * 0.01;                                                                 break; //Ignition angle      [deg]
     case 0x90: result = a * b * 0.01;                                                                          break; //Consumption         [l/h]
     case 0x91: result = a * b * 0.01;                                                                          break; //Consumption         [l/100km]
@@ -1745,25 +1884,25 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     //0x93 - unknown formula (Inclination [%])
     case 0x94: result = a * (b - 0x80) / 4.0;                                                                  break; //Slip RPM            [N/A]
     case 0x95: result = a * (b - 100) * 0.1;                                                                   break; //Temperature         [degC]
-    case 0x96: result = (float)((b_raw << 8) | a_raw) * 0.00555555;                                            break; //Mass flow           [g/s]
+    case 0x96: result = (float)((byte_b << 8) | byte_a) * 0.00555555;                                          break; //Mass flow           [g/s]
     case 0x97: result = a * (b - 0x80) * 0.01;                                                                 break; //Idle correction     [degKW]
     case 0x98: result = a * b / 40.0;                                                                          break; //Air mass per stroke [mg/h]
     case 0x99: result = a * (b - 0x80) / 256.0;                                                                break; //Injection quantity  [mg/h]
     case 0x9A: result = a * b;                                                                                 break; //Angle               [deg]
     case 0x9B: result = a * b * 0.01 - 90.0;                                                                   break; //Angle               [deg]
-    case 0x9C: result = uint16_t((a_raw << 8) | b_raw);                                                        break; //Distance            [cm]
-    case 0x9D: result = int16_t((a_raw << 8) | b_raw);                                                         break; //Distance            [cm]
-    case 0x9E: result = uint16_t((a_raw << 8) | b_raw) * 0.01;                                                 break; //Speed               [km/h]
+    case 0x9C: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Distance            [cm]
+    case 0x9D: result = int16_t((byte_a << 8) | byte_b);                                                       break; //Distance            [cm]
+    case 0x9E: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //Speed               [km/h]
     case 0x9F: result = (a  + (b - 0x7F) * 256.0) * 0.1;                                                       break; //Temperature         [degC]
     //0xA0 - unknown
-    case 0xA1: result = uint16_t(a_raw << 8) | b_raw;                                                          break; //Binary bytes        [bin(a)bin(b)]
+    case 0xA1: result = uint16_t(byte_a << 8) | byte_b;                                                        break; //Binary bytes        [bin(a)bin(b)]
     case 0xA2: result = a * b * 0.448;                                                                         break; //Angle               [deg]
     case 0xA3: result = b / 100.0 + a;                                                                         break; //Clock               [a:b]
     case 0xA4: result = (b > 100 && b <= 200) ? (b - 100) : b;                                                 break; //Percentage          [%]
     case 0xA5: result = a + (b - 0x80) * 256.0;                                                                break; //Current             [mA]
-    case 0xA6: result = ((a_raw % 4) - 4 * (a >= 0x80)) * 640.0 + b * 2.5;                                     break; //Turn rate           [deg/s]
+    case 0xA6: result = ((byte_a % 4) - 4 * (a >= 0x80)) * 640.0 + b * 2.5;                                    break; //Turn rate           [deg/s]
     case 0xA7: result = a * b * 0.001;                                                                         break; //Resistance          [mOhm]
-    case 0xA8: result = uint16_t((a_raw << 8) | b_raw) * 0.01;                                                 break; //N/A                 [%]
+    case 0xA8: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //N/A                 [%]
     case 0xA9: result = a * b + 200;                                                                           break; //N/A                 [mV]
     case 0xAA: result = a * b / 2560.0;                                                                        break; //N/A                 [g]
     case 0xAB: result = a * b / 256.0;                                                                         break; //N/A                 [g]
@@ -1772,9 +1911,9 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
     case 0xAE: result = a * b * 0.01;                                                                          break; //N/A                 [l/1000km]
     case 0xAF: result = a * b * 0.005;                                                                         break; //N/A                 [bar]
     case 0xB0: result = a * b * 0.1;                                                                           break; //N/A                 [ppm]
-    case 0xB1: result = uint16_t((a_raw << 8) | b_raw) - 32768.0;                                              break; //N/A                 [Nm]
+    case 0xB1: result = uint16_t((byte_a << 8) | byte_b) - 32768.0;                                            break; //N/A                 [Nm]
     case 0xB2: result = a * 30.11796 + b * 0.118 - 3855.1;                                                     break; //N/A                 [deg/s]
-    case 0xB3: result = uint16_t((a_raw << 8) | b_raw) * 10.0;                                                 break; //N/A                 [N/A]
+    case 0xB3: result = uint16_t((byte_a << 8) | byte_b) * 10.0;                                               break; //N/A                 [N/A]
     case 0xB4: result = a * b / 256.0;                                                                         break; //N/A                 [kg/h]
     case 0xB5: result = a * b * 0.001;                                                                         break; //N/A                 [mg/s]
   }
@@ -1785,15 +1924,23 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t am
 
 /**
   Function:
-    getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size, char* str, size_t string_size)
+    getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size, char[] str, size_t string_size)
+    getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char[] str, size_t string_size)
   
-  Parameters:
+  Parameters (1):
     measurement_index       -> index of the measurement whose units are needed (0-4)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
     measurement_buffer[]    -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
     str[]                   -> string (character array) into which to copy the units
     string_size             -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    formula     -> byte returned by getFormula()
+    byte_a      -> byte returned by getByteA()
+    byte_b      -> byte returned by getByteB()
+    str[]       -> string (character array) into which to copy the units
+    string_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
     char* -> the same character array provided (str), to be able to use it like "Serial.println(getMeasurementUnits(...))"
@@ -1824,7 +1971,13 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
   uint8_t a       = measurement_buffer[3 * measurement_index + 1];
   uint8_t b       = measurement_buffer[3 * measurement_index + 2];
   
-  //Pointer which will point to one of the strings stored in PROGMEM from "units.h", which will be copied into the given string.
+  //Use the other function.
+  return getMeasurementUnits(formula, a, b, str, string_size);
+}
+
+char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char* str, size_t string_size)
+{
+  //This pointer will point to one of the strings stored in PROGMEM from "units.h", which will be copied into the given string.
   const char* unit_pointer = nullptr;
   
   switch (formula) {
@@ -1864,7 +2017,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       break;
     
     case 0x04:
-      unit_pointer = (b < 127) ? KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
+      unit_pointer = (byte_b < 127) ? KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
       break;
     
     case 0x05:
@@ -1897,7 +2050,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       break;
     
     case 0x0A:
-      unit_pointer = b ? KWP_units_Warm : KWP_units_Cold;
+      unit_pointer = byte_b ? KWP_units_Warm : KWP_units_Cold;
       break;
     
     case 0x0C:
@@ -1930,8 +2083,8 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     case 0x10:
     case 0x88:
       for (uint8_t i = 0; i < ((string_size < 8) ? string_size : 8); i++) {
-        if (a & (1 << (7 - i))) {
-          if (b & (1 << (7 - i))) {
+        if (byte_a & (1 << (7 - i))) {
+          if (byte_b & (1 << (7 - i))) {
             str[i] = '1';
           }
           else {
@@ -1954,11 +2107,11 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     case 0x11:
     case 0x8E:
       if (string_size > 0) {
-        str[0] = a;
+        str[0] = byte_a;
       }
       
       if (string_size > 1) {
-        str[1] = b;
+        str[1] = byte_b;
       }
       
       if (string_size > 2) {
@@ -1970,7 +2123,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       return str;
     
     case 0x2C:
-      snprintf(str, string_size, "%02d:%02d", a, b);
+      snprintf(str, string_size, "%02d:%02d", byte_a, byte_b);
       
       if (string_size) {
         str[string_size - 1] = '\0';
@@ -2001,11 +2154,11 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       break;
     
     case 0x1B:
-      unit_pointer = (b < 128) ? KWP_units_Ignition_ATDC : KWP_units_Ignition_BTDC;
+      unit_pointer = (byte_b < 128) ? KWP_units_Ignition_ATDC : KWP_units_Ignition_BTDC;
       break;
     
     case 0x1D:
-      unit_pointer =  (b < a) ? KWP_units_Map1 : KWP_units_Map2;
+      unit_pointer =  (byte_b < byte_a) ? KWP_units_Map1 : KWP_units_Map2;
       break;
     
     case 0x22:
@@ -2125,7 +2278,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       break;
     
     case 0x6B:
-      snprintf(str, string_size, "%02X %02X", a, b);
+      snprintf(str, string_size, "%02X %02X", byte_a, byte_b);
       
       if (string_size) {
         str[string_size - 1] = '\0';
@@ -2146,11 +2299,11 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
       break;
     
     case 0x83:
-      unit_pointer = ((float(a) * float(b) / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
+      unit_pointer = ((float(byte_a) * float(byte_b) / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
       break;
     
     case 0xA1:
-      snprintf(str, string_size, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(a), BYTE_TO_BINARY(b));
+      snprintf(str, string_size, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte_a), BYTE_TO_BINARY(byte_b));
       
       if (string_size) {
         str[string_size - 1] = '\0';
@@ -2196,7 +2349,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     case 0x7B:
       {
         #ifdef KWP1281_TEXT_TABLE_SUPPORTED
-          uint16_t code = (a << 8) | b;
+          uint16_t code = (byte_a << 8) | byte_b;
           
           if (code < (sizeof(formula_string_table) / sizeof(formula_string_table[0])))
           {
@@ -2227,7 +2380,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
     
     //Date
     case 0x7F:
-      snprintf(str, string_size, "%04d.%02d.%02d", 2000 + (b & 0x7F), ((a & 0x07) << 1) | ((b & 0x80) >> 7), (a & 0xF8) >> 3);
+      snprintf(str, string_size, "%04d.%02d.%02d", 2000 + (byte_b & 0x7F), ((byte_a & 0x07) << 1) | ((byte_b & 0x80) >> 7), (byte_a & 0xF8) >> 3);
       
       if (string_size) {
         str[string_size - 1] = '\0';

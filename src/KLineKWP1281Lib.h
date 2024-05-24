@@ -175,12 +175,21 @@ class KLineKWP1281Lib
     
     //Read a group measurement
     executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer = nullptr, size_t measurement_buffer_size = 0);
+    
+    //Get the 3 significant bytes of a measurement
+    static uint8_t getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
+    static uint8_t getByteA(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
+    static uint8_t getByteB(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
+    
     //Get a measurement's type from a group reading (whether the value or the units is significant)
     static measurementType getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
+    static measurementType getMeasurementType(uint8_t formula);
     //Get the calculated value of a measurement from a group reading
     static float getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
+    static float getMeasurementValue(uint8_t formula, uint8_t byte_a, uint8_t byte_b);
     //Get the units of a measurement from a group reading
     static char* getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size);
+    static char* getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char* str, size_t string_size);
     
     //Read a chunk of ROM/EEPROM
     executionStatus readROM(uint8_t chunk_size, uint16_t start_address, uint8_t* memory_buffer = nullptr, uint8_t memory_buffer_size = 0);

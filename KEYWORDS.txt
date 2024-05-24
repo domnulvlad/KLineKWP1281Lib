@@ -50,6 +50,10 @@ adapt	KEYWORD2
 basicSetting	KEYWORD2
 
 readGroup	KEYWORD2
+getFormula	KEYWORD2
+getByteA	KEYWORD2
+getByteB	KEYWORD2
+
 getMeasurementType	KEYWORD2
 getMeasurementValue	KEYWORD2
 getMeasurementUnits	KEYWORD2

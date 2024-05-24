@@ -40,9 +40,9 @@
       *K-line TX -> Serial1 - RX pin 19 / Serial2 - RX pin 17 / Serial3 - RX pin 15
       *K-line RX -> Serial1 - TX pin 18 / Serial2 - TX pin 16 / Serial3 - TX pin 14
 
-  ESP32
+  ESP32 / ESP32-C6
     *has one additional serial port
-    *pins:
+    *pins (they can be remapped, this is what they are configured to in these examples):
       *K-line TX -> RX pin 16
       *K-line RX -> TX pin 17
 
