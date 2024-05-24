@@ -1924,8 +1924,8 @@ float KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t byte_a, uint
 
 /**
   Function:
-    getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size, char[] str, size_t string_size)
-    getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char[] str, size_t string_size)
+    getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size, char str[], size_t string_size)
+    getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char str[], size_t string_size)
   
   Parameters (1):
     measurement_index       -> index of the measurement whose units are needed (0-4)
