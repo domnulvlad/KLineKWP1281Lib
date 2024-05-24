@@ -206,11 +206,13 @@ void getSingleMeasurement(uint8_t block, uint8_t measurement_index, KLineKWP1281
 
     case KLineKWP1281Lib::SUCCESS:
       {
+        //Fill a measurement structure with the 3 significant bytes of the requested measurement.
         kline_measurement_structure measurement_structure;
         measurement_structure.formula = KLineKWP1281Lib::getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
         measurement_structure.byte_a = KLineKWP1281Lib::getByteA(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
         measurement_structure.byte_b = KLineKWP1281Lib::getByteB(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-
+        
+        //Put the structure on the specified queue; don't wait for the queue to free up if it is full.
         xQueueSend(measurement_queue, &measurement_structure, 0);
       }
       break;
