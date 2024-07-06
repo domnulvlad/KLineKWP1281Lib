@@ -36,6 +36,8 @@ recode	KEYWORD2
 
 readFaults	KEYWORD2
 getFaultCode	KEYWORD2
+isOBDFaultCode	KEYWORD2
+getOBDFaultCode	KEYWORD2
 getFaultDescription	KEYWORD2
 getFaultDescriptionLength	KEYWORD2
 getFaultElaborationCode	KEYWORD2
@@ -48,19 +50,25 @@ testAdaptation	KEYWORD2
 adapt	KEYWORD2
 
 basicSetting	KEYWORD2
+getBasicSettingValue	KEYWORD2
 
 readGroup	KEYWORD2
 getFormula	KEYWORD2
-getByteA	KEYWORD2
-getByteB	KEYWORD2
+getNWb	KEYWORD2
+getMWb	KEYWORD2
+getMeasurementData	KEYWORD2
+getMeasurementDataLength	KEYWORD2
 
 getMeasurementType	KEYWORD2
 getMeasurementValue	KEYWORD2
 getMeasurementUnits	KEYWORD2
+getMeasurementDecimals	KEYWORD2
 
 readROM	KEYWORD2
 
 outputTests	KEYWORD2
+getOutputTestDescription	KEYWORD2
+getOutputTestDescriptionLength	KEYWORD2
 
 ##########################################
 # Constants/variables (LITERAL1)

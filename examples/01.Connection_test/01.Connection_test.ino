@@ -68,36 +68,6 @@
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex);
 #endif
 
-//Debugging can be enabled in configuration.h in order to print bus traffic on the Serial Monitor.
-#if debug_traffic
-void KWP1281debugFunction(bool type, uint8_t sequence, uint8_t command, uint8_t* data, uint8_t length) {
-  Serial.println();
-  
-  Serial.println(type ? "RECEIVE:" : "SEND:");
-
-  Serial.print("*command: ");
-  if (command < 0x10) Serial.print(0);
-  Serial.println(command, HEX);
-
-  Serial.print("*sequence: ");
-  if (sequence < 0x10) Serial.print(0);
-  Serial.println(sequence, HEX);
-
-  if (length) {
-    Serial.print("*data bytes: ");
-    Serial.println(length);
-
-    Serial.print("*data: ");
-    for (uint16_t i = 0; i < length; i++) { //iterate through the message's contents
-      if (data[i] < 0x10) Serial.print(0);  //print a leading 0 where necessary to display 2-digit HEX
-      Serial.print(data[i], HEX);           //print the byte in HEX
-      Serial.print(' ');
-    }
-    Serial.println();
-  }
-}
-#endif
-
 void setup() {
   //Initialize the Serial Monitor.
   Serial.begin(115200);

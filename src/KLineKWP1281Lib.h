@@ -12,6 +12,10 @@
 //#define KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
 //(if disabled, the string given to getFaultDescription() will contain "EN_dsc")
 
+//If the following line is commented out, OBD fault code description strings are removed from the library (to save memory):
+//#define KWP1281_OBD_FAULT_CODE_DESCRIPTION_SUPPORTED
+//(if disabled, the string given to getFaultDescription() will contain "EN_obd")
+
 //If the following line is commented out, fault code elaboration strings are removed from the library (to save memory):
 #define KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
 //(if disabled, the string given to getFaultElaboration() will contain "EN_elb")
@@ -20,9 +24,11 @@
 
 #include <Arduino.h>
 #include "units.h" //measurement unit strings
+#include "decimals.h" //measurement decimals
+#include "keyed_struct.h" //storage type for text
 
 #ifdef KWP1281_TEXT_TABLE_SUPPORTED
-  //choose special text table language, if enabled:
+  //choose text table language, if enabled:
   
   #include "text_table_EN.h"
   //#include "text_table_DE.h"
@@ -31,7 +37,7 @@
 #endif
 
 #ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
-  //choose fault code description text table language, if enabled:
+  //choose fault code description text language, if enabled:
   
   #include "fault_code_description_EN.h"
   //#include "fault_code_description_DE.h"
@@ -39,8 +45,17 @@
   //#include "fault_code_description_RO.h"
 #endif
 
+#ifdef KWP1281_OBD_FAULT_CODE_DESCRIPTION_SUPPORTED
+  //choose OBD fault code description text language, if enabled:
+  
+  #include "OBD_fault_code_description_EN.h"
+  //#include "OBD_fault_code_description_DE.h"
+  //#include "OBD_fault_code_description_PL.h"
+  //#include "OBD_fault_code_description_RO.h"
+#endif
+
 #ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
-  //choose fault code elaboration text table language, if enabled:
+  //choose fault code elaboration text language, if enabled:
   
   #include "fault_code_elaboration_EN.h"
   //#include "fault_code_elaboration_DE.h"
@@ -52,12 +67,15 @@
 #if defined(__AVR__)
   #define READ_POINTER_FROM_PROGMEM pgm_read_word_near
   
-  #ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+  #if defined(KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED) || defined(KWP1281_OBD_FAULT_CODE_DESCRIPTION_SUPPORTED)
     #warning Enabling fault code descriptions on AVR platforms may cause problems.
   #endif
 #else
   #define READ_POINTER_FROM_PROGMEM pgm_read_dword_near
 #endif
+
+//Helper for determining the amount of elements in an array
+#define ARRAYSIZE(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
 
 class KLineKWP1281Lib
 {  
@@ -142,22 +160,32 @@ class KLineKWP1281Lib
     executionStatus login(uint16_t login_code, uint32_t workshop_code);
     
     //Change the coding of a module
-    executionStatus recode(uint16_t coding, uint32_t workshop_code = 0);
+    executionStatus recode(uint16_t coding, uint32_t workshop_code);
     
     //Get the module's fault codes
     executionStatus readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer = nullptr, size_t fault_code_buffer_size = 0);
     //Get a fault code from a fault code reading
     static uint16_t getFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
-    //Get a fault description string from a fault code reading
+    //Determine whether or not a fault is of standard OBD type
+    static bool isOBDFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
+    static bool isOBDFaultCode(uint16_t fault_code);
+    //Get a string containing the formatted code of a standard OBD fault code
+    static char* getOBDFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size);
+    static char* getOBDFaultCode(uint16_t fault_code, char* str, size_t string_size);
+    //Get the fault description string from a fault code reading
     static char* getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size);
+    static char* getFaultDescription(uint16_t fault_code, char* str, size_t string_size);
     //Get the length of the description string from a fault code reading
     static size_t getFaultDescriptionLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
+    static size_t getFaultDescriptionLength(uint16_t fault_code);
     //Get a fault elaboration code from a fault code reading
     static uint8_t getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
-    //Get a fault elaboration string from a fault code reading
+    //Get the fault elaboration string from a fault code reading
     static char* getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size);
+    static char* getFaultElaboration(bool &is_intermittent, uint8_t elaboration_code, char* str, size_t string_size);
     //Get the length of the elaboration string from a fault code reading
     static size_t getFaultElaborationLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size);
+    static size_t getFaultElaborationLength(uint8_t elaboration_code);
     //Clear the module's fault codes
     executionStatus clearFaults();
     
@@ -171,31 +199,41 @@ class KLineKWP1281Lib
     //Perform a basic setting
     executionStatus basicSetting(uint8_t &amount_of_values, uint8_t group, uint8_t* basic_setting_buffer = nullptr, size_t basic_setting_buffer_size = 0);
     //Get a value from a basic setting reading
-    static uint8_t getBasicSettingValue(uint8_t value_index, uint8_t amount_of_values, uint8_t* basic_setting_buffer = nullptr, size_t basic_setting_buffer_size = 0);
+    static uint8_t getBasicSettingValue(uint8_t value_index, uint8_t amount_of_values, uint8_t* basic_setting_buffer, size_t basic_setting_buffer_size);
     
-    //Read a group measurement
-    executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer = nullptr, size_t measurement_buffer_size = 0);
+    //Read a group (block) of measurements
+    executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     
     //Get the 3 significant bytes of a measurement
     static uint8_t getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
-    static uint8_t getByteA(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
-    static uint8_t getByteB(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
+    static uint8_t getNWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
+    static uint8_t getMWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
+    static uint8_t *getMeasurementData(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
+    static uint8_t getMeasurementDataLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
     
     //Get a measurement's type from a group reading (whether the value or the units is significant)
     static measurementType getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     static measurementType getMeasurementType(uint8_t formula);
     //Get the calculated value of a measurement from a group reading
-    static float getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
-    static float getMeasurementValue(uint8_t formula, uint8_t byte_a, uint8_t byte_b);
+    static double getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
+    static double getMeasurementValue(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length);
+    static double getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_t MWb);
     //Get the units of a measurement from a group reading
     static char* getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size);
-    static char* getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char* str, size_t string_size);
+    static char* getMeasurementUnits(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size);
+    //Get the recommended decimal places of a measurement from a group reading
+    static uint8_t getMeasurementDecimals(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
+    static uint8_t getMeasurementDecimals(uint8_t formula);
     
     //Read a chunk of ROM/EEPROM
-    executionStatus readROM(uint8_t chunk_size, uint16_t start_address, uint8_t* memory_buffer = nullptr, uint8_t memory_buffer_size = 0);
+    executionStatus readROM(uint8_t chunk_size, uint16_t start_address, size_t &bytes_received, uint8_t* memory_buffer, uint8_t memory_buffer_size);
     
     //Perform output tests
-    executionStatus outputTests(uint16_t &returned_ID);
+    executionStatus outputTests(uint16_t &current_output_test);
+    //Get the description string for the currently running output test
+    static char* getOutputTestDescription(uint16_t output_test, char* str, size_t string_size);
+    //Get the length of the description string for the currently running output test
+    static size_t getOutputTestDescriptionLength(uint16_t output_test);
     
   private:
     ///VARIABLES/TYPES
@@ -369,7 +407,7 @@ class KLineKWP1281Lib
     //Send the complement of a byte
     void send_complement(uint8_t _byte);
     //Receive a block
-    RETURN_TYPE receive(uint8_t* buffer, size_t buffer_size);
+    RETURN_TYPE receive(size_t &bytes_received, uint8_t* buffer, size_t buffer_size);
     //Confirm receiving a block and request sending the next
     bool acknowledge();
     
@@ -387,93 +425,12 @@ class KLineKWP1281Lib
     //Describe the received command in a block
     void show_command_description(uint8_t command);
     
-    /*
-      Fault elaboration code: 7-bit + 1 bit; high-bit=Intermittent
-        00 - -
-        01 - Signal Shorted to Plus
-        02 - Signal Shorted to Ground
-        03 - No Signal
-        04 - Mechanical Malfunction
-        05 - Input Open
-        06 - Signal too High
-        07 - Signal too Low
-        08 - Control Limit Surpassed
-        09 - Adaptation Limit Surpassed
-        10 - Adaptation Limit Not Reached
-        11 - Control Limit Not Reached
-        12 - Adaptation Limit (Mul) Exceeded
-        13 - Adaptation Limit (Mul) Not Reached
-        14 - Adaptation Limit (Add) Exceeded
-        14 - Adaptation Limit (Add) Exceeded
-        15 - Adaptation Limit (Add) Not Reached
-        16 - Signal Outside Specifications
-        17 - Control Difference
-        18 - Upper Limit
-        19 - Lower Limit
-        20 - Malfunction in Basic Setting
-        21 - Front Pressure Build-up Time too Long
-        22 - Front Pressure Reducing Time too Long
-        23 - Rear Pressure Build-up Time too Long
-        24 - Rear Pressure Reducing Time too Long
-        25 - Unknown Switch Condition
-        26 - Output Open
-        27 - Implausible Signal
-        28 - Short to Plus
-        29 - Short to Ground
-        30 - Open or Short to Plus
-        31 - Open or Short to Ground
-        32 - Resistance Too High
-        33 - Resistance Too Low
-        34 - No Elaboration Available
-        35 - -
-        36 - Open Circuit
-        37 - Faulty
-        38 - Output won't Switch or Short to Plus
-        39 - Output won't Switch or Short to Ground
-        40 - Short to Another Output
-        41 - Blocked or No Voltage
-        42 - Speed Deviation too High
-        43 - Closed
-        44 - Short Circuit
-        45 - Connector
-        46 - Leaking
-        47 - No Communications or Incorrectly Connected
-        48 - Supply voltage
-        49 - No Communications
-        50 - Setting (Early) Not Reached
-        51 - Setting (Late) Not Reached
-        52 - Supply Voltage Too High
-        53 - Supply Voltage Too Low
-        54 - Incorrectly Equipped
-        55 - Adaptation Not Successful
-        56 - In Limp-Home Mode
-        57 - Electric Circuit Failure
-        58 - Can't Lock
-        59 - Can't Unlock
-        60 - Won't Safe
-        61 - Won't De-Safe
-        62 - No or Incorrect Adjustment
-        63 - Temperature Shut-Down
-        64 - Not Currently Testable
-        65 - Unauthorized
-        66 - Not Matched
-        67 - Set-Point Not Reached
-        68 - Cylinder 1
-        69 - Cylinder 2
-        70 - Cylinder 3
-        71 - Cylinder 4
-        72 - Cylinder 5
-        73 - Cylinder 6
-        74 - Cylinder 7
-        75 - Cylinder 8
-        76 - Terminal 30 missing
-        77 - Internal Supply Voltage
-        78 - Missing Messages
-        79 - Please Check Fault Codes
-        80 - Single-Wire Operation
-        81 - Open
-        82 - Activated
-    */
+    //Helper functions
+    static bool is_long_block(uint8_t formula);
+    static double ToSigned(double MW);
+    static double ToSigned(double NW, double MW);
+    static double To16Bit(double NW, double MW);
+    static int compare_keyed_structs(const void *a, const void *b);
 };
 
 #endif

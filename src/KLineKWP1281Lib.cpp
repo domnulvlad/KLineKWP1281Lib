@@ -6,9 +6,9 @@
   
   Parameters:
     beginFunction   -> [void (unsigned long baud)] function to begin communication on the serial port
-    endFunction     -> [void                   ()] function to end communication on the serial port
-    sendFunction    -> [void       (uint8_t data)] function to write a byte to the serial port
-    receiveFunction -> [bool      (uint8_t &data)] function to receive a byte from the serial port
+    endFunction     -> [void ()                  ] function to end communication on the serial port
+    sendFunction    -> [void (uint8_t data)      ] function to write a byte to the serial port
+    receiveFunction -> [bool (uint8_t &data)     ] function to receive a byte from the serial port
     tx_pin          -> digital pin, coincides with the selected serial port's transmit pin
     full_duplex     -> flag indicating whether or not the selected serial interface can also read while sending
     (debug_port)    -> optionally provide the address of a HardwareSerial object (e.g. &Serial) to send debug information on
@@ -44,7 +44,6 @@
     ||}
 */
 KLineKWP1281Lib::KLineKWP1281Lib(beginFunction_type beginFunction, endFunction_type endFunction, sendFunction_type sendFunction, receiveFunction_type receiveFunction, uint8_t tx_pin, bool full_duplex, Stream* debug_port) :
-  //Use the initializer list to set the private variables.
   _beginFunction    (beginFunction),
   _endFunction      (endFunction),
   _sendFunction     (sendFunction),
@@ -185,7 +184,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::attemptConnect(uint8_t module,
   //Set the timeout to the appropriate value for receiving an initialization response (protocol parameters).
   _timeout = initResponseTimeout;
   
-  //If initialization is successful, the module will send exactly 3 bytes (0x55 = sync, then 0x01 0x8A or 0x01 0x0A = KWP1281 designator).
+  //If initialization is successful, the module will send exactly 3 bytes (0x55 = sync, then 0x018A/0x010A = KWP1281 designator).
   
   //Try to receive the sync byte without sending a complement, or exit if receiving times out.
   if (read_byte(_receive_byte, false) == ERROR_TIMEOUT) {
@@ -289,7 +288,8 @@ void KLineKWP1281Lib::update()
   }
   
   //Check the response.
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_ACK:
       break;
     
@@ -317,7 +317,8 @@ void KLineKWP1281Lib::disconnect()
   show_debug_info(DISCONNECT_INFO);
   
   //Some modules may send a "refuse" block, don't leave it un-complemented.
-  receive(_receive_buffer, sizeof(_receive_buffer));
+  size_t bytes_received;
+  receive(bytes_received, _receive_buffer, sizeof(_receive_buffer));
   
   //Clear the strings in the module identification struct.
   memset(identification_data.part_number, 0, sizeof(identification_data.part_number));
@@ -435,7 +436,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::login(uint16_t login_code, uin
     return ERROR;
   }
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_REFUSE:
       show_debug_info(LOGIN_NOT_ACCEPTED);
       return FAIL;
@@ -499,7 +501,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::recode(uint16_t coding, uint32
   
   Parameters:
     amount_of_fault_codes  -> will contain the total number of fault codes
-    fault_code_buffer[]    -> array into which to store the fault codes
+    fault_code_buffer      -> array into which to store the fault codes
     fault_code_buffer_size -> total (maximum) length of the given array
   
   Returns:
@@ -555,6 +557,29 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::recode(uint16_t coding, uint32
       ||  
       ||  Serial.println();
       ||}
+    
+    *Some fault codes may be sent in a "standard OBD" format. This is how they should be handled:
+      ||if (KLineKWP1281Lib::isOBDFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer)))
+      ||{
+      ||  //Declare a character array and use it to store the formatted fault code string.
+      ||  char DTC_string[6];
+      ||
+      ||  //Store the formatted fault code in the string.
+      ||  KLineKWP1281Lib::getOBDFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer), DTC_string, sizeof(DTC_string));
+      ||
+      ||  //Print the fault code.
+      ||  Serial.println(DTC_string);
+      ||}
+    
+    *It is possible to use the getFaultCode() function to avoid giving so many parameters to all other functions:
+      ||//Get the fault code.
+      ||uint16_t fault_code = KLineKWP1281Lib::getFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer));
+      ||
+      ||//Only give the fault code to the functions
+      ||if (KLineKWP1281Lib::isOBDFaultCode(fault_code))
+      ||{
+      ||  ...
+      ||}
 */
 KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
@@ -570,7 +595,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_
   
   //Loop until no more fault codes can be read.
   while (true) {
-    switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+    size_t bytes_received;
+    switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
       case TYPE_REFUSE:
         show_debug_info(FAULT_CODES_NOT_SUPPORTED);
         return FAIL;
@@ -583,12 +609,12 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_
       case TYPE_FAULT_CODES:
       {
         //Determine how many fault codes have just been received.
-        fault_codes_in_current_block = _receive_buffer[0] / 3;
+        fault_codes_in_current_block = bytes_received / 3;
         
         //A single stored DTC, with code 0xFFFF and elaboration 0x88, means no DTCs present.
         if (fault_codes_in_current_block == 1) {
-          if (_receive_buffer[1] == 0xFF && _receive_buffer[2] == 0xFF) {
-            if (_receive_buffer[3] == 0x88) {
+          if (_receive_buffer[0] == 0xFF && _receive_buffer[1] == 0xFF) {
+            if (_receive_buffer[2] == 0x88) {
               show_debug_info(NO_FAULT_CODES);
               amount_of_fault_codes = 0;
               return SUCCESS;
@@ -607,7 +633,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_
         uint8_t fault_codes_to_copy = min(fault_codes_in_current_block, max_fault_codes_in_array);
       
         //Each code takes up 3 bytes.
-        memcpy(fault_code_buffer + fault_buffer_index, _receive_buffer + 1, fault_codes_to_copy * 3);
+        memcpy(fault_code_buffer + fault_buffer_index, _receive_buffer, fault_codes_to_copy * 3);
         
         //Increment the buffer index by how many bytes were copied.
         fault_buffer_index += fault_codes_to_copy * 3;
@@ -634,7 +660,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_
   Parameters:
     fault_code_index       -> index of the fault code that needs to be retrieved
     amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
-    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
     fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
@@ -644,7 +670,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_
     Provides a fault code from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *It is a static function, so it does not require an instance to be used.
 */
 uint16_t KLineKWP1281Lib::getFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
@@ -665,112 +691,258 @@ uint16_t KLineKWP1281Lib::getFaultCode(uint8_t fault_code_index, uint8_t amount_
 
 /**
   Function:
-    getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+    isOBDFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size)
+    isOBDFaultCode(uint16_t fault_code)
   
-  Parameters:
-    fault_code_index       -> index of the fault code whose description needs to be retrieved
+  Parameters (1):
+    fault_code_index       -> index of the fault code whose type needs to be determined
     amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
-    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
     fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
-    str[]                  -> string (character array) into which to copy the description string
-    string_size            -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    fault_code  -> fault code given by getFaultCode()
   
   Returns:
-    char* -> the same character array provided (str), to be able to use it like "Serial.println(getFaultDescription(...))"
+    bool -> whether or not the fault code is of standard OBD type
   
   Description:
     Provides a fault description string from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *If a fault code is of standard OBD type, use getOBDFaultCode() to get a string containing the formatted code.
+    *It is a static function, so it does not require an instance to be used.
+*/
+bool KLineKWP1281Lib::isOBDFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+{
+  //Determine the fault code.
+  uint16_t fault_code = getFaultCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+  
+  //Use the other function.
+  return isOBDFaultCode(fault_code);
+}
+
+bool KLineKWP1281Lib::isOBDFaultCode(uint16_t fault_code)
+{
+  //The fault code is of standard OBD type if it's between 0x4000 and 0x7FFF.
+  return (fault_code >= 0x4000 && fault_code <= 0x7FFF);
+}
+
+/**
+  Function:
+    getOBDFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size, char str[], size_t string_size)
+    getOBDFaultCode(uint16_t fault_code, char* str, size_t string_size)
+  
+  Parameters (1):
+    fault_code_index       -> index of the fault code whose formatted code needs to be retrieved
+    amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
+    str                    -> string (character array) into which to copy the description string
+    string_size            -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    fault_code  -> fault code given by getFaultCode()
+    str         -> string (character array) into which to copy the description string
+    string_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    char* -> the same character array provided (str)
+  
+  Description:
+    Formats a standard OBD fault code.
+  
+  Notes:
+    *If the provided fault code is not of the standard OBD type, an empty string is returned.
+    *It is a static function, so it does not require an instance to be used.
+*/
+char* KLineKWP1281Lib::getOBDFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+{
+  //Determine the fault code.
+  uint16_t fault_code = getFaultCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+  
+  //Use the other function.
+  return getOBDFaultCode(fault_code, str, string_size);
+}
+
+char* KLineKWP1281Lib::getOBDFaultCode(uint16_t fault_code, char* str, size_t string_size)
+{
+  //If an invalid buffer was provided, return an invalid string.
+  if (!str || !string_size)
+  {
+    return nullptr;
+  }
+  
+  //If the provided fault code is not of the standard OBD type, return an empty string.
+  if (!isOBDFaultCode(fault_code))
+  {
+    str[0] = '\0';
+    return str;
+  }
+  
+  //Determine the fault's category (P/C/B/U).
+  char category_type = 0;
+  switch ((fault_code >> 0xC) & 0xF)
+  {
+    case 4: category_type = 'P'; break;
+    case 5: category_type = 'C'; break;
+    case 6: category_type = 'B'; break;
+    case 7: category_type = 'U'; break;
+  }
+  
+  //Determine the fault's category code (for example, for P1 it gets 1).
+  uint8_t category_code = ((fault_code >> 8) & 0xF) / 4;
+  
+  //Determine the last 3 digits of the code.
+  uint16_t converted_dtc = fault_code - (((((fault_code >> 0xC) & 0xF) << 4) | (category_code << 2)) << 8);
+  
+  //If the last 3 digits somehow went above 999, return an empty string.
+  if (converted_dtc > 999)
+  {
+    str[0] = '\0';
+    return str;
+  }
+  
+  //Format the string into the given buffer.
+  snprintf(str, string_size, "%c%d%03d", category_type, category_code, converted_dtc);
+  str[string_size - 1] = '\0';
+  return str;
+}
+
+/**
+  Function:
+    getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size, char str[], size_t string_size)
+    getFaultDescription(uint16_t fault_code, char* str, size_t string_size)
+  
+  Parameters (1):
+    fault_code_index       -> index of the fault code whose description needs to be retrieved
+    amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
+    str                    -> string (character array) into which to copy the description string
+    string_size            -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    fault_code  -> fault code given by getFaultCode()
+    str         -> string (character array) into which to copy the description string
+    string_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    char* -> the same character array provided (str)
+  
+  Description:
+    Provides a fault description string from a buffer filled by readFaults().
+  
+  Notes:
+    *If the fault code is of the standard OBD type, the description may also contain the fault elaboration string at the end,
+    after the ':' character.
+    *It is a static function, so it does not require an instance to be used.
 */
 char* KLineKWP1281Lib::getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
 {
-  //If the feature is enabled, copy the description into the given string.
-#ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
-
   //Determine the fault code.
   uint16_t fault_code = getFaultCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
-    
-  //This pointer will point to one of the strings stored in PROGMEM from "fault_code_description_xx.h", which will be copied into the given string.
-  const char* description_pointer = nullptr;
-  switch (fault_code)
+  
+  //Use the other function.
+  return getFaultDescription(fault_code, str, string_size);
+}
+
+char* KLineKWP1281Lib::getFaultDescription(uint16_t fault_code, char* str, size_t string_size)
+{
+  //If an invalid buffer was provided, return an invalid string.
+  if (!str || !string_size)
   {
-    case 0x82C5:
-      description_pointer = KWP_FAULT_82C5;
-      break;
-    case 0x8355:
-      description_pointer = KWP_FAULT_8355;
-      break;
-    case 0x8451:
-      description_pointer = KWP_FAULT_8451;
-      break;
-    case 0x8596:
-      description_pointer = KWP_FAULT_8596;
-      break;
-    case 0x85A6:
-      description_pointer = KWP_FAULT_85A6;
-      break;
-    case 0x8657:
-      description_pointer = KWP_FAULT_8657;
-      break;
-    case 0x865D:
-      description_pointer = KWP_FAULT_865D;
-      break;
-    case 0xFFFF:
-      description_pointer = KWP_FAULT_FFFF;
-      break;
-    default:
-      if (fault_code <= 0x1094)
-      {
-        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table1 + fault_code - 0x0000);
-      }
-      else if (fault_code >= 0x3FD8 && fault_code <= 0x3FF9)
-      {
-        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table2 + fault_code - 0x3FD8);
-      }
-      else if (fault_code >= 0xAFC8 && fault_code <= 0xB1AE)
-      {
-        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table3 + fault_code - 0xAFC8);
-      }
-      break;
+    return nullptr;
   }
   
-  //If the description is valid, copy its string into the given array.
-  if (description_pointer)
+  //Determine the fault's type.
+  if (isOBDFaultCode(fault_code))
   {
-    //Copy the description string into the given array.
-    strncpy_P(str, (const char*)description_pointer, string_size);
+  //If the feature is enabled, copy the description into the given string.
+#ifdef KWP1281_OBD_FAULT_CODE_DESCRIPTION_SUPPORTED
+
+    //Get the code formatted correctly.
+    char OBD_fault_code_string[6];
+    getOBDFaultCode(fault_code, OBD_fault_code_string, sizeof(OBD_fault_code_string));
     
-    //Ensure the string is null-terminated.
-    if (string_size) {
+    //Calculate the text code of the description string, by converting the code to BCD and adding the fault's category.
+    unsigned int text_code;
+    sscanf(&OBD_fault_code_string[1], "%04x", &text_code);
+    text_code |= (((fault_code >> 0xC) & 0xF) - 4) << 0xE;
+    
+    //The calculated text code will be used as the key for a binary search.
+    struct keyed_struct bsearch_key;
+    bsearch_key.code = text_code;
+    
+    //Binary search the key in the OBD fault description table.
+    struct keyed_struct *result = (struct keyed_struct *)bsearch(
+      &bsearch_key, OBD_fault_description_table_entries, ARRAYSIZE(OBD_fault_description_table_entries),
+      sizeof(struct keyed_struct), compare_keyed_structs);
+  
+    //If the text is found, copy it into the string.
+    if (result)
+    {
+      //Retrieve the structure from PROGMEM.
+      keyed_struct struct_from_PGM;
+      memcpy_P((void*)&struct_from_PGM, result, sizeof(keyed_struct));
+      
+      //Copy the description string.
+      strncpy_P(str, struct_from_PGM.text, string_size);
       str[string_size - 1] = '\0';
     }
-  }
-  
-  //Otherwise, clear the string by writing a null on the first position.
-  else {
-    if (string_size) {
+    //Otherwise, clear the string.
+    else
+    {
       str[0] = '\0';
     }
-  }
 
 #else
   
-  (void)fault_code_index;
-  (void)amount_of_fault_codes;
-  (void)fault_code_buffer;
-  (void)fault_code_buffer_size;
-
-  //Otherwise, copy the "warning" into the given string.
-  strncpy(str, "EN_dsc", string_size);
-  
-  //Ensure the string is null-terminated.
-  if (string_size) {
+    //Otherwise, copy the "warning" into the given string.
+    strncpy(str, "EN_obd", string_size);
     str[string_size - 1] = '\0';
-  }
-  
+
 #endif
+  }
+  else
+  {
+  //If the feature is enabled, copy the description into the given string.
+#ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
+
+    //The fault code will be used as the key for a binary search.
+    struct keyed_struct bsearch_key;
+    bsearch_key.code = fault_code;
+    
+    //Binary search the key in the regular fault description table.
+    struct keyed_struct *result = (struct keyed_struct *)bsearch(
+      &bsearch_key, fault_description_table_entries, ARRAYSIZE(fault_description_table_entries),
+      sizeof(struct keyed_struct), compare_keyed_structs);
+  
+    //If the text is found, copy it into the string.
+    if (result)
+    {
+      //Retrieve the structure from PROGMEM.
+      keyed_struct struct_from_PGM;
+      memcpy_P((void*)&struct_from_PGM, result, sizeof(keyed_struct));
+      
+      //Copy the description string.
+      strncpy_P(str, struct_from_PGM.text, string_size);
+      str[string_size - 1] = '\0';
+    }
+    //Otherwise, clear the string.
+    else
+    {
+      str[0] = '\0';
+    }
+
+#else
+  
+    //Otherwise, copy the "warning" into the given string.
+    strncpy(str, "EN_dsc", string_size);
+    str[string_size - 1] = '\0';
+
+#endif
+  }
   
   //Return a pointer to the given array.
   return str;
@@ -778,13 +950,17 @@ char* KLineKWP1281Lib::getFaultDescription(uint8_t fault_code_index, uint8_t amo
 
 /**
   Function:
-    getFaultDescriptionLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+    getFaultDescriptionLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size)
+    getFaultDescriptionLength(uint16_t fault_code)
   
-  Parameters:
+  Parameters (1):
     fault_code_index       -> index of the fault code whose description needs to be retrieved
     amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
-    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
     fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    fault_code  -> fault code given by getFaultCode()
   
   Returns:
     size_t -> string length
@@ -793,72 +969,46 @@ char* KLineKWP1281Lib::getFaultDescription(uint8_t fault_code_index, uint8_t amo
     Provides the length of the fault description string from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *It is a static function, so it does not require an instance to be used.
 */
 size_t KLineKWP1281Lib::getFaultDescriptionLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
+{
+  //Determine the fault code.
+  uint16_t fault_code = getFaultCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+  
+  //Use the other function.
+  return getFaultDescriptionLength(fault_code);
+}
+
+size_t KLineKWP1281Lib::getFaultDescriptionLength(uint16_t fault_code)
 {
   //If the feature is enabled, get the string length.
 #ifdef KWP1281_FAULT_CODE_DESCRIPTION_SUPPORTED
 
-  //Determine the fault code.
-  uint16_t fault_code = getFaultCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
-    
-  //This pointer will point to one of the strings stored in PROGMEM from "fault_code_description_xx.h".
-  const char* description_pointer = nullptr;
-  switch (fault_code)
-  {
-    case 0x82C5:
-      description_pointer = KWP_FAULT_82C5;
-      break;
-    case 0x8355:
-      description_pointer = KWP_FAULT_8355;
-      break;
-    case 0x8451:
-      description_pointer = KWP_FAULT_8451;
-      break;
-    case 0x8596:
-      description_pointer = KWP_FAULT_8596;
-      break;
-    case 0x85A6:
-      description_pointer = KWP_FAULT_85A6;
-      break;
-    case 0x8657:
-      description_pointer = KWP_FAULT_8657;
-      break;
-    case 0x865D:
-      description_pointer = KWP_FAULT_865D;
-      break;
-    case 0xFFFF:
-      description_pointer = KWP_FAULT_FFFF;
-      break;
-    default:
-      if (fault_code <= 0x1094)
-      {
-        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table1 + fault_code - 0x0000);
-      }
-      else if (fault_code >= 0x3FD8 && fault_code <= 0x3FF9)
-      {
-        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table2 + fault_code - 0x3FD8);
-      }
-      else if (fault_code >= 0xAFC8 && fault_code <= 0xB1AE)
-      {
-        description_pointer = (const char*)READ_POINTER_FROM_PROGMEM(fault_description_table3 + fault_code - 0xAFC8);
-      }
-      break;
-  }
-  
-  //If the description is valid, return its length.
-  if (description_pointer)
-  {
-    return strlen_P((const char*)description_pointer);
-  }
+   //The fault code will be used as the key for a binary search.
+   struct keyed_struct bsearch_key;
+   bsearch_key.code = fault_code;
+
+   //Binary search the key in the fault description table.
+   struct keyed_struct *result = (struct keyed_struct *)bsearch(
+     &bsearch_key, fault_description_table_entries, ARRAYSIZE(fault_description_table_entries),
+     sizeof(struct keyed_struct), compare_keyed_structs);
+   
+   //If the text is found, return its length.
+   if (result)
+   {
+     return strlen_P(result->text);
+   }
+   //Otherwise, return 0.
+   else
+   {
+     return 0;
+   }
 
 #else
   
-  (void)fault_code_index;
-  (void)amount_of_fault_codes;
-  (void)fault_code_buffer;
-  (void)fault_code_buffer_size;
+  //Mark the parameter as unused.
+  (void)fault_code;
   
   //If the feature is not enabled, return the length of the "warning";
   return strlen("EN_dsc");
@@ -876,7 +1026,7 @@ size_t KLineKWP1281Lib::getFaultDescriptionLength(uint8_t fault_code_index, uint
   Parameters:
     fault_code_index       -> index of the fault code whose elaboration code needs to be retrieved
     amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
-    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
     fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
@@ -886,7 +1036,7 @@ size_t KLineKWP1281Lib::getFaultDescriptionLength(uint8_t fault_code_index, uint
     Provides a fault elaboration code from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *It is a static function, so it does not require an instance to be used.
 */
 uint8_t KLineKWP1281Lib::getFaultElaborationCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
@@ -906,30 +1056,53 @@ uint8_t KLineKWP1281Lib::getFaultElaborationCode(uint8_t fault_code_index, uint8
 
 /**
   Function:
-    getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+    getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size, char str[], size_t string_size)
+    getFaultElaboration(bool &is_intermittent, uint8_t elaboration_code, char str[], size_t string_size)
   
-  Parameters:
+  Parameters (1):
     is_intermittent        -> whether or not the elaboration code indicated that the fault is "Intermittent"
     fault_code_index       -> index of the fault code whose elaboration needs to be retrieved
     amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
-    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
     fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
-    str[]                  -> string (character array) into which to copy the elaboration string
+    str                    -> string (character array) into which to copy the elaboration string
     string_size            -> total size of the given array (provided with the sizeof() operator)
   
+  Parameters (2):
+    is_intermittent  -> whether or not the elaboration code indicated that the fault is "Intermittent"
+    elaboration_code -> elaboration code given by getFaultElaborationCode()
+    str              -> string (character array) into which to copy the elaboration string
+    string_size      -> total size of the given array (provided with the sizeof() operator)
+  
   Returns:
-    char* -> the same character array provided (str), to be able to use it like "Serial.println(getFaultElaboration(...))"
+    char* -> the same character array provided (str)
   
   Description:
     Provides a fault elaboration string from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *The fault elaboration may not be correct if the fault code is of standard OBD type.
+    *Use the isOBDFaultCode() function to check the type of fault code.
+    *If it is of standard OBD type, the elaboration will be contained in the description string,
+    after the ':' character.
+    *It is a static function, so it does not require an instance to be used.
 */
 char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
 {
   //Determine the elaboration code.
   uint8_t elaboration_code = getFaultElaborationCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+  
+  //Use the other function.
+  return getFaultElaboration(is_intermittent, elaboration_code, str, string_size);
+}
+
+char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t elaboration_code, char* str, size_t string_size)
+{
+  //If an invalid buffer was provided, return an invalid string.
+  if (!str || !string_size)
+  {
+    return nullptr;
+  }
   
   //The fault is considered "Intermittent" if the highest bit in the elaboration code is set.
   is_intermittent = elaboration_code & 0x80;
@@ -941,7 +1114,7 @@ char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_
 #ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
 
   //If the elaboration code is valid, copy its string into the given array.
-  if (elaboration_code < (sizeof(fault_elaboration_table) / sizeof(fault_elaboration_table[0]))) {
+  if (elaboration_code < ARRAYSIZE(fault_elaboration_table)) {
     //Copy the elaboration string into the given array.
     strncpy_P(str, (const char*)READ_POINTER_FROM_PROGMEM(fault_elaboration_table + elaboration_code), string_size);
     
@@ -950,23 +1123,16 @@ char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_
       str[string_size - 1] = '\0';
     }
   }
-  
   //Otherwise, clear the string by writing a null on the first position.
   else {
-    if (string_size) {
-      str[0] = '\0';
-    }
+    str[0] = '\0';
   }
   
 #else
   
   //Otherwise, copy the "warning" into the given string.
   strncpy(str, "EN_elb", string_size);
-  
-  //Ensure the string is null-terminated.
-  if (string_size) {
-    str[string_size - 1] = '\0';
-  }
+  str[string_size - 1] = '\0';
   
 #endif
   
@@ -976,16 +1142,17 @@ char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_
 
 /**
   Function:
-    getFaultElaborationLength(bool &is_intermittent, uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size, char* str, size_t string_size)
+    getFaultElaborationLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size)
+    getFaultElaborationLength(uint8_t elaboration_code)
   
-  Parameters:
-    is_intermittent        -> whether or not the elaboration code indicated that the fault is "Intermittent"
-    fault_code_index       -> index of the fault code whose elaboration needs to be retrieved
+  Parameters (1):
+    fault_code_index       -> index of the fault code whose elaboration length needs to be retrieved
     amount_of_fault_codes  -> total number of fault codes stored in the array (value passed as reference to readFaults())
-    fault_code_buffer[]    -> array in which fault codes have been stored by readFaults()
+    fault_code_buffer      -> array in which fault codes have been stored by readFaults()
     fault_code_buffer_size -> total size of the given array (provided with the sizeof() operator)
-    str[]                  -> string (character array) into which to copy the elaboration string
-    string_size            -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    elaboration_code -> elaboration code given by getFaultElaborationCode()
   
   Returns:
     size_t -> string length
@@ -994,30 +1161,34 @@ char* KLineKWP1281Lib::getFaultElaboration(bool &is_intermittent, uint8_t fault_
     Provides the length of the fault elaboration string from a buffer filled by readFaults().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *It is a static function, so it does not require an instance to be used.
 */
 size_t KLineKWP1281Lib::getFaultElaborationLength(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
-{  
-  //If the feature is enabled, get the string length.
-#ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
-
+{
   //Determine the elaboration code.
   uint8_t elaboration_code = getFaultElaborationCode(fault_code_index, amount_of_fault_codes, fault_code_buffer, fault_code_buffer_size);
+  
+  //Use the other function.
+  return getFaultElaborationLength(elaboration_code);
+}
+
+size_t KLineKWP1281Lib::getFaultElaborationLength(uint8_t elaboration_code)
+{
+  //If the feature is enabled, get the string length.
+#ifdef KWP1281_FAULT_CODE_ELABORATION_SUPPORTED
 
   //Ensure the high bit is not set.
   elaboration_code &= ~0x80;
   
   //If the elaboration code is valid, return its length.
-  if (elaboration_code < (sizeof(fault_elaboration_table) / sizeof(fault_elaboration_table[0]))) {
+  if (elaboration_code < ARRAYSIZE(fault_elaboration_table)) {
     return strlen_P((const char*)READ_POINTER_FROM_PROGMEM(fault_elaboration_table + elaboration_code));
   }
   
 #else
   
-  (void)fault_code_index;
-  (void)amount_of_fault_codes;
-  (void)fault_code_buffer;
-  (void)fault_code_buffer_size;
+  //Mark the parameter as unused.
+  (void)elaboration_code;
   
   //If the feature is not enabled, return the length of the "warning";
   return strlen("EN_elb");
@@ -1051,7 +1222,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::clearFaults()
     return ERROR;
   }
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_REFUSE:
       show_debug_info(CLEARING_FAULT_CODES_NOT_SUPPORTED);
       return FAIL;
@@ -1091,7 +1263,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readAdaptation(uint8_t channel
     return ERROR;
   }
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_REFUSE:
       show_debug_info(INVALID_ADAPTATION_CHANNEL);
       return FAIL;
@@ -1100,7 +1273,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readAdaptation(uint8_t channel
       show_debug_info(ADAPTATION_RECEIVED);
       
       //Combine the two bytes to get the adaptation value.
-      value = (_receive_buffer[2] << 8) | _receive_buffer[3];
+      value = (_receive_buffer[1] << 8) | _receive_buffer[2];
       return SUCCESS;
     
     default:
@@ -1137,13 +1310,14 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::testAdaptation(uint8_t channel
     return ERROR;
   }
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_REFUSE:
       show_debug_info(INVALID_ADAPTATION_CHANNEL);
       return FAIL;
     
     case TYPE_ADAPTATION:
-      if (uint16_t((_receive_buffer[2] << 8) | _receive_buffer[3]) == value) {
+      if (uint16_t((_receive_buffer[1] << 8) | _receive_buffer[2]) == value) {
         show_debug_info(ADAPTATION_ACCEPTED);
         return SUCCESS;
       }
@@ -1195,7 +1369,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::adapt(uint8_t channel, uint16_
     return ERROR;
   }
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_REFUSE:
       show_debug_info(INVALID_ADAPTATION_CHANNEL_OR_VALUE);
       return FAIL;
@@ -1217,7 +1392,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::adapt(uint8_t channel, uint16_
   Parameters:
     amount_of_values          -> will contain the total number of values read from the basic setting group
     group                     -> basic setting group to activate/read
-    basic_setting_buffer[]    -> array into which to store the received values
+    basic_setting_buffer      -> array into which to store the received values
     basic_setting_buffer_size -> total (maximum) length of the given array
   
   Returns:
@@ -1245,7 +1420,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
     }
   }
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_REFUSE:
       show_debug_info(INVALID_BASIC_SETTING_GROUP);
       return FAIL;
@@ -1258,8 +1434,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
       {
         show_debug_info(RECEIVED_BASIC_SETTING);
         
-        //Determine how many values were received.
-        amount_of_values = _receive_buffer[0];
+        //Determine the amount of values received.
+        amount_of_values = bytes_received;
         
         //Determine how many values to copy into the given buffer.
         uint8_t max_values_in_receive_buffer = sizeof(_receive_buffer); //how many values would fit in the receive buffer
@@ -1267,7 +1443,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
         uint8_t values_to_copy = min(amount_of_values, min(max_values_in_receive_buffer, max_values_in_array));
         
         //Copy the values from the RX buffer into the given array.
-        memcpy(basic_setting_buffer, _receive_buffer + 1, values_to_copy);
+        memcpy(basic_setting_buffer, _receive_buffer, values_to_copy);
         return SUCCESS;
       }
       break;
@@ -1285,7 +1461,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
   Parameters:
     value_index               -> index of the value that needs to be retrieved
     amount_of_values          -> total number of values stored in the array (value passed as reference to basicSetting())
-    basic_setting_buffer[]    -> array in which fault codes have been stored by basicSetting()
+    basic_setting_buffer      -> array in which fault codes have been stored by basicSetting()
     basic_setting_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
@@ -1295,7 +1471,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
     Provides a measured value from a buffer filled by basicSetting().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *It is a static function, so it does not require an instance to be used.
 */
 uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amount_of_values, uint8_t* basic_setting_buffer, size_t basic_setting_buffer_size)
 {
@@ -1321,7 +1497,7 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
   Parameters:
     amount_of_measurements  -> will contain the total number of measurements in the group
     group                   -> measurement group to read
-    measurement_buffer[]    -> array into which to store the measurements
+    measurement_buffer      -> array into which to store the measurements
     measurement_buffer_size -> total (maximum) length of the given array
   
   Returns:
@@ -1369,6 +1545,10 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
 */
 KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
+  //If an error occurs, report 0 measurements.
+  amount_of_measurements = 0;
+  
+  //On non-null groups, request the measurements normally.
   if (group) {
     uint8_t parameters[] = {group};
     if (!send(KWP_REQUEST_GROUP_READING, parameters, sizeof(parameters))) {
@@ -1376,6 +1556,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
       return ERROR;
     }
   }
+  //Group 0 is requested separately.
   else {
     if (!send(KWP_REQUEST_GROUP_READING_0)) {
       show_debug_info(SEND_ERROR);
@@ -1383,7 +1564,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
     }
   }
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, measurement_buffer, measurement_buffer_size)) {
     case TYPE_REFUSE:
       show_debug_info(INVALID_MEASUREMENT_GROUP);
       return FAIL;
@@ -1396,16 +1578,33 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
       {
         show_debug_info(RECEIVED_GROUP);
         
-        //Determine how many measurements were received.
-        amount_of_measurements = _receive_buffer[0] / 3;
+        //If the measurements can't fit in the given buffer, it's considered a fatal error.
+        //This is because it might not be possible to count how many measurements were received, if the data is incomplete.
+        if (bytes_received > measurement_buffer_size)
+        {
+          show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
+          return ERROR;
+        }
         
-        //Determine how many measurements to copy into the given buffer.
-        uint8_t max_measurements_in_receive_buffer = sizeof(_receive_buffer)  / 3; //how many measurements would fit in the receive buffer
-        uint8_t max_measurements_in_array = measurement_buffer_size  / 3; //how many measurements would fit in the given array
-        uint8_t measurements_to_copy = min(amount_of_measurements, min(max_measurements_in_receive_buffer, max_measurements_in_array));
-        
-        //Copy the measurements from the RX buffer into the given array.
-        memcpy(measurement_buffer, _receive_buffer + 1, measurements_to_copy * 3);
+        //Count each measurement.
+        size_t buffer_index = 0;
+        while (buffer_index < bytes_received)
+        {
+          //Normally, a measurement takes 3 bytes.
+          uint8_t measurement_length = 3;
+          
+          //If the measurement is "long", its length is specified in the first byte after the formula.
+          uint8_t formula = measurement_buffer[buffer_index];
+          if (is_long_block(formula))
+          {
+            //Include the formula byte and the length byte in the count.
+            measurement_length = measurement_buffer[buffer_index + 1] + 2;
+          }
+          
+          //Count the measurement and advance the buffer position.
+          amount_of_measurements++;
+          buffer_index += measurement_length;
+        }
       }
       return SUCCESS;
     
@@ -1420,9 +1619,9 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
     getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
   
   Parameters:
-    measurement_index       -> index of the measurement whose type must be determined (0-4)
+    measurement_index       -> index of the measurement whose formula must be determined (0-4)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
-    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
@@ -1432,104 +1631,304 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
     Retrieves the formula byte for a measurement from a buffer filled by readGroup().
   
   Notes:
-    *Each measurement has 3 bytes. Formula is the first byte. They can be used for the getMeasurementType(), getMeasurementValue() and getMeasurementUnits()
-    functions instead of giving the entire measurement buffer.
-    *It is a static function so it does not require an instance to be used.
+    *Most measurements have 3 bytes. The formula is the first byte.
+    *It is a static function, so it does not require an instance to be used.
 */
 uint8_t KLineKWP1281Lib::getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
-{
-  // Check if the array is large enough to contain as many measurements as "declared" by the value given.
-  if (measurement_buffer_size < amount_of_measurements * 3)
-  {
-    amount_of_measurements = measurement_buffer_size / 3;
-  }
-
+{  
   // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
   if (measurement_index >= amount_of_measurements)
   {
     return 0;
   }
+  
+  //Go through each measurement, returning the formula when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
+  {
+    //Normally, a measurement takes 3 bytes.
+    uint8_t measurement_length = 3;
+    
+    //If the measurement is "long", its length is specified in the first byte after the formula.
+    uint8_t formula = measurement_buffer[buffer_index];
+    if (is_long_block(formula))
+    {
+      //Include the formula byte and the length byte in the count.
+      measurement_length = measurement_buffer[buffer_index + 1] + 2;
+    }
+    
+    //If currently on the requested index, return the formula.
+    if (current_measurement == measurement_index)
+    {
+      return formula;
+    }
+    
+    //Advance the buffer position.
+    buffer_index += measurement_length;
+  }
 
-  // Get the formula from the buffer based on the requested index.
-  return measurement_buffer[3 * measurement_index];
+  return 0;
 }
 
 /**
   Function:
-    getByteA(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    getNWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
   
   Parameters:
-    measurement_index       -> index of the measurement whose type must be determined (0-4)
+    measurement_index       -> index of the measurement whose NWb must be determined (0-4)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
-    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
-    uint8_t -> byte A
+    uint8_t -> NWb (byte A)
   
   Description:
     Retrieves byte A for a measurement from a buffer filled by readGroup().
   
   Notes:
-    *Each measurement has 3 bytes. Byte A is the second byte. They can be used for the getMeasurementType(), getMeasurementValue() and getMeasurementUnits()
-    functions instead of giving the entire measurement buffer.
-    *It is a static function so it does not require an instance to be used.
+    *Most measurements have 3 bytes. NWb is the second byte.
+    *It is a static function, so it does not require an instance to be used.
 */
-uint8_t KLineKWP1281Lib::getByteA(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+uint8_t KLineKWP1281Lib::getNWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
 {
-  // Check if the array is large enough to contain as many measurements as "declared" by the value given.
-  if (measurement_buffer_size < amount_of_measurements * 3)
-  {
-    amount_of_measurements = measurement_buffer_size / 3;
-  }
-
   // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
   if (measurement_index >= amount_of_measurements)
   {
     return 0;
   }
-
-  // Get byte_a from the buffer based on the requested index.
-  return measurement_buffer[3 * measurement_index + 1];
+  
+  //Go through each measurement, returning NWb when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
+  {
+    //Normally, a measurement takes 3 bytes.
+    uint8_t measurement_length = 3;
+    
+    //If the measurement is "long", its length is specified in the first byte after the formula.
+    uint8_t formula = measurement_buffer[buffer_index];
+    if (is_long_block(formula))
+    {
+      //Include the formula byte and the length byte in the count.
+      measurement_length = measurement_buffer[buffer_index + 1] + 2;
+    }
+    
+    //If currently on the requested index, return NWb.
+    if (current_measurement == measurement_index)
+    {
+      //If the measurement is "long", NWb doesn't exist.
+      if (is_long_block(formula))
+      {
+        return 0;
+      }
+      //Otherwise, return the byte after the formula.
+      else
+      {
+        return measurement_buffer[buffer_index + 1];
+      }
+    }
+    
+    //Advance the buffer position.
+    buffer_index += measurement_length;
+  }
+  
+  return 0;
 }
 
 /**
   Function:
-    getByteB(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    getMWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
   
   Parameters:
-    measurement_index       -> index of the measurement whose type must be determined (0-4)
+    measurement_index       -> index of the measurement whose MWb must be determined (0-4)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
-    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
-    uint8_t -> byte B
+    uint8_t -> MWb (byte B)
   
   Description:
     Retrieves byte B for a measurement from a buffer filled by readGroup().
   
   Notes:
-    *Each measurement has 3 bytes. Byte B is the third byte. They can be used for the getMeasurementType(), getMeasurementValue() and getMeasurementUnits()
-    functions instead of giving the entire measurement buffer.
-    *It is a static function so it does not require an instance to be used.
+    *Most measurements have 3 bytes. NWb is the third byte.
+    *It is a static function, so it does not require an instance to be used.
 */
-uint8_t KLineKWP1281Lib::getByteB(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+uint8_t KLineKWP1281Lib::getMWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
 {
-  // Check if the array is large enough to contain as many measurements as "declared" by the value given.
-  if (measurement_buffer_size < amount_of_measurements * 3)
-  {
-    amount_of_measurements = measurement_buffer_size / 3;
-  }
-
   // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
   if (measurement_index >= amount_of_measurements)
   {
     return 0;
   }
+  
+  //Go through each measurement, returning MWb when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
+  {
+    //Normally, a measurement takes 3 bytes.
+    uint8_t measurement_length = 3;
+    
+    //If the measurement is "long", its length is specified in the first byte after the formula.
+    uint8_t formula = measurement_buffer[buffer_index];
+    if (is_long_block(formula))
+    {
+      //Include the formula byte and the length byte in the count.
+      measurement_length = measurement_buffer[buffer_index + 1] + 2;
+    }
+    
+    //If currently on the requested index, return MWb.
+    if (current_measurement == measurement_index)
+    {
+      //If the measurement is "long", MWb doesn't exist.
+      if (is_long_block(formula))
+      {
+        return 0;
+      }
+      //Otherwise, return the byte after NWb.
+      else
+      {
+        return measurement_buffer[buffer_index + 2];
+      }
+    }
+    
+    //Advance the buffer position.
+    buffer_index += measurement_length;
+  }
+  
+  return 0;
+}
 
-  // Get byte_b from the buffer based on the requested index.
-  return measurement_buffer[3 * measurement_index + 2];
+/**
+  Function:
+    getMeasurementData(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+  
+  Parameters:
+    measurement_index       -> index of the measurement whose data must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    uint8_t* -> measurement data buffer
+  
+  Description:
+    Retrieves the data for a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *Usually, measurements contain 2 data bytes, but, in some special cases, they may contain more.
+    *Find out how many bytes the measurement takes with the getMeasurementDataLength() function.
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t* KLineKWP1281Lib::getMeasurementData(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+{
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return an invalid buffer.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return nullptr;
+  }
+  
+  //Go through each measurement, returning the measurement data when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
+  {
+    //Normally, a measurement takes 3 bytes.
+    uint8_t measurement_length = 3;
+    
+    //If the measurement is "long", its length is specified in the first byte after the formula.
+    uint8_t formula = measurement_buffer[buffer_index];
+    if (is_long_block(formula))
+    {
+      //Include the formula byte and the length byte in the count.
+      measurement_length = measurement_buffer[buffer_index + 1] + 2;
+    }
+    
+    //If currently on the requested index, return the measurement data.
+    if (current_measurement == measurement_index)
+    {
+      //If the measurement is "long", the data starts after the length byte.
+      if (is_long_block(formula))
+      {
+        return &measurement_buffer[buffer_index + 2];
+      }
+      //Otherwise, for most measurements, the data starts after the formula.
+      else
+      {
+        return &measurement_buffer[buffer_index + 1];
+      }
+    }
+    
+    //Advance the buffer position.
+    buffer_index += measurement_length;
+  }
+  
+  return nullptr;
+}
+
+/**
+  Function:
+    getMeasurementDataLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+  
+  Parameters:
+    measurement_index       -> index of the measurement whose data length must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    uint8_t -> measurement data length
+  
+  Description:
+    Retrieves the data length for a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *Usually, measurements contain 2 data bytes, but, in some special cases, they may contain more.
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getMeasurementDataLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+{
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return 0;
+  }
+  
+  //Go through each measurement, returning the measurement data when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
+  {
+    //Normally, a measurement takes 3 bytes.
+    uint8_t measurement_length = 3;
+    
+    //If the measurement is "long", its length is specified in the first byte after the formula.
+    uint8_t formula = measurement_buffer[buffer_index];
+    if (is_long_block(formula))
+    {
+      //Include the formula byte and the length byte in the count.
+      measurement_length = measurement_buffer[buffer_index + 1] + 2;
+    }
+    
+    //If currently on the requested index, return the measurement data.
+    if (current_measurement == measurement_index)
+    {
+      //If the measurement is "long", the length is specified by the byte after the formula.
+      if (is_long_block(formula))
+      {
+        return measurement_buffer[buffer_index + 1];
+      }
+      //Otherwise, for most measurements, the data length is 2.
+      else
+      {
+        return 2;
+      }
+    }
+    
+    //Advance the buffer position.
+    buffer_index += measurement_length;
+  }
+  
+  return 0;
 }
 
 /**
@@ -1540,7 +1939,7 @@ uint8_t KLineKWP1281Lib::getByteB(uint8_t measurement_index, uint8_t amount_of_m
   Parameters (1):
     measurement_index       -> index of the measurement whose type must be determined (0-4)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
-    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Parameters (2):
@@ -1556,25 +1955,16 @@ uint8_t KLineKWP1281Lib::getByteB(uint8_t measurement_index, uint8_t amount_of_m
     Determines whether the value or the units string is significant for a measurement from a buffer filled by readGroup().
   
   Notes:
-    *Even if the measurement is of type UNITS, its value still contains the "origin" of the units string, like a code or 16-bit value so it can be used without
+    *If an invalid measurement_index is specified, the returned type is UNKNOWN.
+    *Even if the measurement is of type UNITS, its value might contain the "origin" of the units string, like a code or 16-bit value so it can be used without
     necessarily checking the units string.
     *For example, for a clock measurement, the units string will contain "hh:mm", but the value will also be hh.mm (hours before decimal, minutes after).
-    *It is a static function so it does not require an instance to be used.
+    *It is a static function, so it does not require an instance to be used.
 */
 KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
-  //Check if the array is large enough to contain as many measurements as "declared" by the value given.
-  if (measurement_buffer_size < amount_of_measurements * 3) {
-    amount_of_measurements = measurement_buffer_size / 3;
-  }
-  
-  //If the requested index is out of range (or the buffer doesn't contain measurements), return UNKNOWN.
-  if (measurement_index >= amount_of_measurements) {
-    return UNKNOWN;
-  }
-  
-  //Determine the formula based on the given index.
-  uint8_t formula = measurement_buffer[3 * measurement_index];
+  //Determine the formula.
+  uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   
   //Use the other function.
   return getMeasurementType(formula);
@@ -1584,18 +1974,24 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t for
 {
   //Only a few measurement formulas are of the "UNITS" type.
   switch (formula) {
-    case 0x0A:
-    case 0x10:
-    case 0x11:
-    case 0x1D:
-    case 0x25:
-    case 0x2C:
-    case 0x6B:
-    case 0x7B:
-    case 0x7F:
-    case 0x88:
-    case 0x8E:
-    case 0xA1:
+    case 0x00:
+      return UNKNOWN;
+      
+    case 0x0A: //Warm/Cold
+    case 0x10: //Switch positions
+    case 0x11: //2 ASCII letters
+    case 0x1D: //Map1/Map2
+    case 0x25: //Text from table
+    case 0x2C: //Time
+    case 0x3F: //ASCII long text
+    case 0x5F: //ASCII long text
+    case 0x6B: //Hex bytes
+    case 0x76: //Hex bytes
+    case 0x7B: //Text from table
+    case 0x7F: //Date
+    case 0x88: //Switch positions
+    case 0x8E: //2 ASCII letters
+    case 0xA1: //Binary bytes
       return UNITS;
     
     default:
@@ -1606,796 +2002,786 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t for
 /**
   Function:
     getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
-    getMeasurementValue(uint8_t formula, uint8_t byte_a, uint8_t byte_b)
+    getMeasurementValue(uint8_t formula, uint8_t measurement_data[], uint8_t measurement_data_length)
+    getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_t MWb)
   
   Parameters (1):
     measurement_index       -> index of the measurement that needs to be calculated (0-3)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
-    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
   
   Parameters (2):
+    formula                 -> byte returned by getFormula()
+    measurement_data        -> buffer returned by getMeasurementData()
+    measurement_data_length -> byte returned by getMeasurementDataLength()
+  
+  Parameters (3):
     formula -> byte returned by getFormula()
-    byte_a  -> byte returned by getByteA()
-    byte_b  -> byte returned by getByteB()
+    NWb     -> byte returned by getNWb()
+    MWb     -> byte returned by getMWb()
   
   Returns:
-    float -> calculated value
+    double -> calculated value
   
   Description:
     Calculates the actual value of a measurement from a buffer filled by readGroup().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *If an invalid measurement_index is specified, the returned value is nan.
+    *It is a static function, so it does not require an instance to be used.
 */
-float KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
+double KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
-  //Check if the array is large enough to contain as many measurements as "declared" by the value given.
-  if (measurement_buffer_size < amount_of_measurements * 3) {
-    amount_of_measurements = measurement_buffer_size / 3;
-  }
+  //Determine the formula.
+  uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   
-  //If the requested index is out of range (or the buffer doesn't contain measurements), return 0/0 (nan).
-  if (measurement_index >= amount_of_measurements) {
+  //If the measurement is "long", the value cannot be calculated; return nan.
+  if (is_long_block(formula))
+  {
     return 0.0 / 0.0;
   }
   
-  //Get the three important values from the buffer based on the requested index.
-  uint8_t formula = measurement_buffer[3 * measurement_index];
-  uint8_t byte_a  = measurement_buffer[3 * measurement_index + 1];
-  uint8_t byte_b  = measurement_buffer[3 * measurement_index + 2];
+  //Determine NWb and MWb.
+  uint8_t NWb = getNWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  uint8_t MWb = getMWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   
   //Use the other function.
-  return getMeasurementValue(formula, byte_a, byte_b);
+  return getMeasurementValue(formula, NWb, MWb);
 }
 
-float KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t byte_a, uint8_t byte_b)
+double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length)
 {
-  //Convert the values to floating point for use in formulas.
-  float a = byte_a, b = byte_b;
-  
-  /*
-    Formula unknown - 6E, 8B, 8C, 8D, 93.
-    Meaning unknown - A0.
-  */
-  
-  //Calculate the real value depending on the formula.
-  float result = 0;
-  switch (formula) {
-    //0x00 - doesn't exist
-    case 0x01: result = a * b * 0.2;                                                                           break; //RPM                 [/min]
-    case 0x02: result = a * b * 0.002;                                                                         break; //Load                [%]
-    case 0x03: result = a * b * 0.002;                                                                         break; //Throttle angle      [deg]
-    case 0x04: result = a * abs(b - 0x7F) * 0.01;                                                              break; //Ignition angle      [deg]
-    case 0x05: result = a * (b - 100) * 0.1;                                                                   break; //Temperature         [degC]
-    case 0x06: result = a * b * 0.001;                                                                         break; //Voltage             [V]
-    case 0x07: result = a * b * 0.01;                                                                          break; //Speed               [km/h]
-    case 0x08: result = a * b * 0.1;                                                                           break; //N/A                 [N/A]
-    case 0x09: result = a * (b - 0x7F) * 0.02;                                                                 break; //Steering angle      [deg]
-    case 0x0A: result = b ? 1 : 0;                                                                             break; //Text                [Warm/Cold]
-    case 0x0B: result = a * (b - 0x80) * 0.0001 + 1;                                                           break; //Lambda factor       [N/A]
-    case 0x0C: result = a * b * 0.001;                                                                         break; //Resistance          [Ohm]
-    case 0x0D: result = a * (b - 0x7F) * 0.001;                                                                break; //Distance            [mm]
-    case 0x0E: result = a * b * 0.005;                                                                         break; //Pressure            [bar]
-    case 0x0F: result = a * b * 0.01;                                                                          break; //Injection time      [ms]
-    case 0x10: result = byte_b & byte_a;                                                                       break; //Binary bits         [bin(b&a)]
-    case 0x11: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //ASCII               [char(a)char(b)]
-    case 0x12: result = a * b * 0.04;                                                                          break; //Pressure            [mbar]
-    case 0x13: result = a * b * 0.01;                                                                          break; //Fuel volume         [l]
-    case 0x14: result = a * (b - 0x80) / 128.0;                                                                break; //Deviation           [%]
-    case 0x15: result = a * b * 0.001;                                                                         break; //Voltage             [V]
-    case 0x16: result = a * b * 0.001;                                                                         break; //Time                [ms]
-    case 0x17: result = a * b / 256.0;                                                                         break; //Duty cycle          [%]
-    case 0x18: result = a * b * 0.001;                                                                         break; //Current             [A]
-    case 0x19: result = (float)((byte_b << 8) | byte_a) * 0.00555555;                                          break; //Mass flow           [g/s]
-    case 0x1A: result = b - a;                                                                                 break; //Temperature         [degC]
-    case 0x1B: result = a * abs(b - 0x80) * 0.01;                                                              break; //Ignition angle      [deg]
-    case 0x1C: result = b - a;                                                                                 break; //N/A                 [N/A]
-    case 0x1D: result = (b < a) ? 1 : 2;                                                                       break; //Map number          [Map1/2]
-    case 0x1E: result = a * b / 12.0;                                                                          break; //Knock correction    [deg]
-    case 0x1F: result = a * b / 2560.0;                                                                        break; //N/A                 [N/A]
-    case 0x20: result = (int8_t)b;                                                                             break; //N/A                 [N/A]
-    case 0x21: result = a ? (100.0 * b / float(a)) : 0;                                                        break; //Load                [%]
-    case 0x22: result = a * (b - 0x80) * 0.01;                                                                 break; //Idle correction     [KW]
-    case 0x23: result = a * b * 0.01;                                                                          break; //Consumption         [l/h]
-    case 0x24: result = uint16_t((byte_a << 8) | byte_b) * 10.0;                                               break; //Mileage             [km]
-    case 0x25: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Text                [strings from table]
-    case 0x26: result = a * (b - 0x80) * 0.001;                                                                break; //Segment correction  [degKW]
-    case 0x27: result = a * b / 255.0;                                                                         break; //Injection quantity  [mg/h]
-    case 0x28: result = a * 25.5 + b * 0.1 - 400.0;                                                            break; //Current             [A]
-    case 0x29: result = uint16_t(a * 255 + b);                                                                 break; //Capacity            [Ah]
-    case 0x2A: result = ((a * 255.0 + b) - 4000.0) * 0.1;                                                      break; //Power               [kW]
-    case 0x2B: result = uint16_t(a * 255 + b) * 0.1;                                                           break; //Battery voltage     [V]
-    case 0x2C: result = b / 100.0 + a;                                                                         break; //Clock               [a:b]
-    case 0x2D: result = a * b * 0.1;                                                                           break; //Consumption         [l/100km]
-    case 0x2E: result = (a - 0x80) * 0.704 + b * 0.00275;                                                      break; //Segment correction  [degKW]
-    case 0x2F: result = a * (b - 0x80);                                                                        break; //Time correction     [ms]
-    case 0x30: result = uint16_t(a * 255 + b);                                                                 break; //N/A                 [N/A]
-    case 0x31: result = a * b / 40.0;                                                                          break; //Air mass per stroke [mg/h]
-    case 0x32: result = a ? ((b - 0x80) * 100.0 / a) : 0;                                                      break; //Pressure            [mbar]
-    case 0x33: result = a * (b - 0x80) / 255.0;                                                                break; //Injection quantity  [mg/h]
-    case 0x34: result = a * b * 0.02 - a;                                                                      break; //Torque              [Nm]
-    case 0x35: result = (((byte_b << 8) | byte_a) - 32768) * 0.00555555;                                       break; //Mass flow           [g/s]
-    case 0x36: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Count               [N/A]
-    case 0x37: result = a * b / 200.0;                                                                         break; //Time                [s]
-    case 0x38: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Workshop code       [N/A]
-    case 0x39: result = uint16_t((byte_a << 8) | byte_b) + 65536;                                              break; //Workshop code       [N/A]
-    case 0x3A: result = b * 260.9 / 255.0;                                                                     break; //Misfires            [/s]
-    case 0x3B: result = uint16_t((byte_a << 8) | byte_b) * 2.0 / 65535.0;                                      break; //N/A                 [N/A]
-    case 0x3C: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //Time                [s]
-    case 0x3D: result = a ? ((b - 0x80) / float(a)) : 0;                                                       break; //Difference          [N/A]
-    case 0x3E: result = a * b * 0.256;                                                                         break; //Time                [s]
-    //0x3F - doesn't exist
-    case 0x40: result = a + b;                                                                                 break; //Resistance          [Ohm]
-    case 0x41: result = a * (b - 0x7F) * 0.01;                                                                 break; //Distance            [mm]
-    case 0x42: result = (a * b) / 512.0;                                                                       break; //Voltage             [V]
-    case 0x43:                                                                                                        //Steering angle      [deg]
-    {
-      int16_t word = (byte_a << 8) | byte_b;
-      if (word & 0x8000)
-      {
-        word |= 0x7C00;
-      }
-      else
-      {
-        word &= 0x83FF;
-      }
-      
-      result = word * 2.5;
-    }
-    break;
-    case 0x44:                                                                                                        //Turn rate           [deg/s]
-    {
-      int16_t word = (byte_a << 8) | byte_b;
-      if (word & 0x8000)
-      {
-        word |= 0x7C00;
-      }
-      else
-      {
-        word &= 0x83FF;
-      }
-      
-      result = word * 0.1358;
-    }
-    break;
-    case 0x45:                                                                                                        //Pressure            [bar]
-    {
-      int16_t word = (byte_a << 8) | byte_b;
-      if (word & 0x8000)
-      {
-        word |= 0x7C00;
-      }
-      else
-      {
-        word &= 0x83FF;
-      }
-      
-      result = word * 0.3255;
-    }
-    break;
-    case 0x46:                                                                                                        //Acceleration        [m/s^2]
-    {
-      int16_t word = (byte_a << 8) | byte_b;
-      if (word & 0x8000)
-      {
-        word |= 0x7C00;
-      }
-      else
-      {
-        word &= 0x83FF;
-      }
-      
-      result = word * 0.192;
-    }
-    break;
-    case 0x47: result = a * b;                                                                                 break; //Distance            [cm]
-    case 0x48: result = (((211 - byte_a) * b) + (byte_a * 255)) * 0.0002450980392156863;                       break; //Voltage             [V]
-    case 0x49: result = a * b * 0.01;                                                                          break; //Resistance          [Ohm]
-    case 0x4A: result = a * b * 0.1;                                                                           break; //Time                [months]
-    case 0x4B: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Error code          [N/A]
-    case 0x4C: result = uint16_t((byte_a << 8) | byte_b) - a;                                                  break; //Resistance          [kOhm]
-    case 0x4D: result = ((byte_a << 8) + (byte_b * 60)) * 0.000245098039215686;                                break; //Voltage             [V]
-    case 0x4E: result = int8_t(b) * 1.819;                                                                     break; //Misfires            [/s]
-    case 0x4F: result = b;                                                                                     break; //Channel number      [N/A]
-    case 0x50: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //Resistance          [kOhm]
-    case 0x51: result = ((byte_a << 8) | byte_b) * 0.04375;                                                    break; //Steering angle      [deg]
-    case 0x52: result = ((byte_a << 8) | byte_b) * 0.00981;                                                    break; //Acceleration        [m/s^2]
-    case 0x53: result = ((byte_a << 8) | byte_b) * 0.01;                                                       break; //Pressure            [bar]
-    case 0x54:                                                                                                        //Acceleration        [m/s^2]
-    {
-      int16_t word = (byte_a << 8) | byte_b;
-      if (word & 0x8000)
-      {
-        word |= 0x7F00;
-      }
-      else
-      {
-        word &= 0xFF;
-      }
-      
-      result = word * 0.0973;
-    }
-    break;
-    case 0x55: result = ((byte_a << 8) | byte_b) * 0.002865;                                                   break; //Turn rate           [deg/s]
-    case 0x56: result = a * b * 0.1;                                                                           break; //Current             [A]
-    case 0x57: result = a * (b - 0x80) * 0.1;                                                                  break; //Turn rate           [deg/s]
-    case 0x58: result = a * b * 0.01;                                                                          break; //Resistance          [kOhm]
-    case 0x59: result = uint16_t(byte_a << 8) | byte_b;                                                        break; //On-time             [h]
-    case 0x5A: result = a * b * 0.1;                                                                           break; //Weight              [kg]
-    case 0x5B: result = a * (b - 0x80) * 0.1;                                                                  break; //Steering angle      [deg]
-    case 0x5C: result = a * b;                                                                                 break; //Mileage             [km]
-    case 0x5D: result = a * (b - 0x80) * 0.001;                                                                break; //Torque              [Nm]
-    case 0x5E: result = a * (b - 0x80) * 0.1;                                                                  break; //Torque              [Nm]
-    //0x5F - shows min(a, length) bytes from the entire contents of block response as ASCII characters
-    case 0x60: result = a * b * 0.1;                                                                           break; //Pressure            [mbar]
-    case 0x61: result = (b - a) * 5;                                                                           break; //Cat-temperature     [degC]
-    case 0x62: result = a * b * 0.1;                                                                           break; //Impulses            [/km]
-    case 0x63: result = (byte_a << 8) | byte_b;                                                                break; //N/A                 [N/A]
-    case 0x64: result = a * b * 0.1;                                                                           break; //Pressure            [bar]
-    case 0x65: result = a * b * 0.001;                                                                         break; //Fuel level factor   [l/mm]
-    case 0x66: result = a * b * 0.1;                                                                           break; //Fuel level          [mm]
-    case 0x67: result = b * 5.0 * 0.01 + a;                                                                    break; //Voltage             [V]
-    case 0x68: result = a * (b - 0x80) / 5.0;                                                                  break; //Volume              [ml]
-    case 0x69: result = a * (b - 0x80) * 0.01;                                                                 break; //Distance            [m]
-    case 0x6A: result = a * (b - 0x80) * 0.1;                                                                  break; //Speed               [km/h]
-    case 0x6B: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Hex bytes           [hex(a)hex(b)]
-    //0x6C - doesn't exist
-    //0x6D - doesn't exist
-    //0x6E - unknown formula (Workshop ID [N/A])
-    case 0x6F: result = a * 0x10000 + b * 0x100;                                                               break; //Mileage             [km]
-    case 0x70: result = a * (b - 0x80) * 0.001;                                                                break; //Angle               [deg]
-    case 0x71: result = a * (b - 0x80) * 0.01;                                                                 break; //N/A                 [N/A]
-    case 0x72: result = a * (b - 0x80);                                                                        break; //Altitude            [m]
-    case 0x73: result = (byte_a << 8) | byte_b;                                                                break; //Output power        [W]
-    case 0x74: result = (byte_a << 8) | byte_b;                                                                break; //RPM                 [/min]
-    case 0x75: result = a * (b - 64) * 0.01;                                                                   break; //Temperature         [degC]
-    //0x76 - shows min(a, length) bytes from the entire contents of block response as HEX values
-    case 0x77: result = a * b * 0.01;                                                                          break; //ACC-Amplitude       [%]
-    case 0x78: result = a * b * 1.411752;                                                                      break; //Angle               [deg]
-    case 0x79: result = a * 5.0 * 0.1 + b * 128.0;                                                             break; //N/A                 [N/A]
-    case 0x7A: result = a * 0.01 + (b - 0x80) * 256.0 * 0.01;                                                  break; //N/A                 [N/A]
-    case 0x7B: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Text                [strings from table]
-    case 0x7C: result = a * b * 0.1;                                                                           break; //Current             [mA]
-    case 0x7D: result = a - b;                                                                                 break; //Attenuation         [dB]
-    case 0x7E: result = a * b * 0.1;                                                                           break; //N/A                 [N/A]
-    case 0x7F: result = 200000 + (byte_b & 0x7F) * 100                                                                 //Date                [yyyy:mm:dd]
-                       + (((byte_a & 0x07) << 1) | ((byte_b & 0x80) >> 7))
-                       + ((byte_a & 0xF8) >> 3) * 0.01;                                                        break; 
-    case 0x80: result = a * b;                                                                                 break; //RPM                 [/min]
-    case 0x81: result = a * b / 256.0;                                                                         break; //Load                [%]
-    case 0x82: result = a * b / 2560.0;                                                                        break; //Current             [A]
-    case 0x83: result = abs(a * b / 2.0 - 30.0);                                                               break; //Ignition angle      [deg]
-    case 0x84: result = a * b / 2.0;                                                                           break; //Throttle angle      [deg]
-    case 0x85: result = a * b / 256.0;                                                                         break; //Voltage             [V]
-    case 0x86: result = a * b;                                                                                 break; //Speed               [km/h]
-    case 0x87: result = a * b;                                                                                 break; //N/A                 [N/A]
-    case 0x88: result = byte_b & byte_a;                                                                       break; //Binary bits         [bin(b&a)]
-    case 0x89: result = a * b * 0.01;                                                                          break; //Injection time      [ms]
-    case 0x8A: result = a * b * 0.001;                                                                         break; //Knock sensor        [V]
-    //0x8B - unknown formula (RPM [/min])
-    //0x8C - unknown formula (Temperature [degC])
-    //0x8D - text from unknown source
-    case 0x8E: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //ASCII               [char(a)char(b)]
-    case 0x8F: result = a * (b - 0x80) * 0.01;                                                                 break; //Ignition angle      [deg]
-    case 0x90: result = a * b * 0.01;                                                                          break; //Consumption         [l/h]
-    case 0x91: result = a * b * 0.01;                                                                          break; //Consumption         [l/100km]
-    case 0x92: result = a * (b - 0x80) * 0.0001 + 1;                                                           break; //Lambda factor       [N/A]
-    //0x93 - unknown formula (Inclination [%])
-    case 0x94: result = a * (b - 0x80) / 4.0;                                                                  break; //Slip RPM            [N/A]
-    case 0x95: result = a * (b - 100) * 0.1;                                                                   break; //Temperature         [degC]
-    case 0x96: result = (float)((byte_b << 8) | byte_a) * 0.00555555;                                          break; //Mass flow           [g/s]
-    case 0x97: result = a * (b - 0x80) * 0.01;                                                                 break; //Idle correction     [degKW]
-    case 0x98: result = a * b / 40.0;                                                                          break; //Air mass per stroke [mg/h]
-    case 0x99: result = a * (b - 0x80) / 256.0;                                                                break; //Injection quantity  [mg/h]
-    case 0x9A: result = a * b;                                                                                 break; //Angle               [deg]
-    case 0x9B: result = a * b * 0.01 - 90.0;                                                                   break; //Angle               [deg]
-    case 0x9C: result = uint16_t((byte_a << 8) | byte_b);                                                      break; //Distance            [cm]
-    case 0x9D: result = int16_t((byte_a << 8) | byte_b);                                                       break; //Distance            [cm]
-    case 0x9E: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //Speed               [km/h]
-    case 0x9F: result = (a  + (b - 0x7F) * 256.0) * 0.1;                                                       break; //Temperature         [degC]
-    //0xA0 - unknown
-    case 0xA1: result = uint16_t(byte_a << 8) | byte_b;                                                        break; //Binary bytes        [bin(a)bin(b)]
-    case 0xA2: result = a * b * 0.448;                                                                         break; //Angle               [deg]
-    case 0xA3: result = b / 100.0 + a;                                                                         break; //Clock               [a:b]
-    case 0xA4: result = (b > 100 && b <= 200) ? (b - 100) : b;                                                 break; //Percentage          [%]
-    case 0xA5: result = a + (b - 0x80) * 256.0;                                                                break; //Current             [mA]
-    case 0xA6: result = ((byte_a % 4) - 4 * (a >= 0x80)) * 640.0 + b * 2.5;                                    break; //Turn rate           [deg/s]
-    case 0xA7: result = a * b * 0.001;                                                                         break; //Resistance          [mOhm]
-    case 0xA8: result = uint16_t((byte_a << 8) | byte_b) * 0.01;                                               break; //N/A                 [%]
-    case 0xA9: result = a * b + 200;                                                                           break; //N/A                 [mV]
-    case 0xAA: result = a * b / 2560.0;                                                                        break; //N/A                 [g]
-    case 0xAB: result = a * b / 256.0;                                                                         break; //N/A                 [g]
-    case 0xAC: result = a * b;                                                                                 break; //N/A                 [mg/km]
-    case 0xAD: result = a * b * 0.1;                                                                           break; //N/A                 [mg/s]
-    case 0xAE: result = a * b * 0.01;                                                                          break; //N/A                 [l/1000km]
-    case 0xAF: result = a * b * 0.005;                                                                         break; //N/A                 [bar]
-    case 0xB0: result = a * b * 0.1;                                                                           break; //N/A                 [ppm]
-    case 0xB1: result = uint16_t((byte_a << 8) | byte_b) - 32768.0;                                            break; //N/A                 [Nm]
-    case 0xB2: result = a * 30.11796 + b * 0.118 - 3855.1;                                                     break; //N/A                 [deg/s]
-    case 0xB3: result = uint16_t((byte_a << 8) | byte_b) * 10.0;                                               break; //N/A                 [N/A]
-    case 0xB4: result = a * b / 256.0;                                                                         break; //N/A                 [kg/h]
-    case 0xB5: result = a * b * 0.001;                                                                         break; //N/A                 [mg/s]
+  //If an invalid buffer was provided, return nan.
+  if (!measurement_data || !measurement_data_length)
+  {
+    return 0.0 / 0.0;
   }
   
-  //Return the calculated value.
-  return result;
+  //If the measurement is "long", the value cannot be calculated; return nan.
+  if (is_long_block(formula))
+  {
+    return 0.0 / 0.0;
+  }
+  
+  //The data length must be 2.
+  if (measurement_data_length != 2)
+  {
+    return 0.0 / 0.0;
+  }
+  
+  //Determine NWb and MWb.
+  uint8_t NWb = measurement_data[0];
+  uint8_t MWb = measurement_data[1];
+  
+  //Use the other function.
+  return getMeasurementValue(formula, NWb, MWb);
+}
+
+double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_t MWb)
+{
+  double NW = NWb, MW = MWb;
+  switch (formula)
+  {
+    //0x00                                                                              //N/A                    [N/A]
+    case 0x01: return MW * NW * 0.2;                                                    //RPM                    [/min]
+    case 0x02: return MW * NW * 0.002;                                                  //Load                   [%]
+    case 0x03: return MW * NW * 0.002;                                                  //Throttle angle         [deg]
+    case 0x04: return (MW - 127) * NW * -0.01;                                          //Ignition angle         [deg]
+    case 0x05: return (MW - 100) * NW * 0.1;                                            //Temperature            [degC]
+    case 0x06: return MW * NW * 0.001;                                                  //Voltage                [V]
+    case 0x07: return MW * NW * 0.01;                                                   //Speed                  [km/h]
+    case 0x08: return MW * NW * 0.1;                                                    //N/A                    [N/A]
+    case 0x09: return (MW - 127) * NW * 0.02;                                           //Steering angle         [deg]
+    case 0x0A: return (MW ? 1 : 0);                                                     //Text                   [Warm/Cold]
+    case 0x0B: return 1 + ((MW - 128) * NW * 0.0001);                                   //Lambda factor          [N/A]
+    case 0x0C: return MW * NW * 0.001;                                                  //Resistance             [Ohm]
+    case 0x0D: return (MW - 127) * NW * 0.001;                                          //Distance               [mm]
+    case 0x0E: return MW * NW * 0.005;                                                  //Pressure               [bar]
+    case 0x0F: return MW * NW * 0.01;                                                   //Injection time         [ms]
+    case 0x10: return MWb & NWb;                                                        //Switch positions       [bin(MWb&NWb)]
+    case 0x11: return To16Bit(NW, MW);                                                  //2 ASCII letters        [char(NWb)char(MWb)]
+    case 0x12: return MW * NW * 0.04;                                                   //Absolute pressure      [mbar]
+    case 0x13: return MW * NW * 0.01;                                                   //Fuel level             [l]
+    case 0x14: return (MW - 128) * NW * 1 / 128;                                        //Lambda integrator      [%]
+    case 0x15: return MW * NW * 0.001;                                                  //Voltage                [V]
+    case 0x16: return MW * NW * 0.001;                                                  //Injection time         [ms]
+    case 0x17: return MW * NW * 1 / 256;                                                //Duty cycle             [%]
+    case 0x18: return MW * NW * 0.001;                                                  //Current                [A]
+    case 0x19: return (256 * MW + NW) * 1 / 180;                                        //Mass flow              [g/s]
+    case 0x1A: return MW - NW;                                                          //Temperature            [degC]
+    case 0x1B: return (MW - 128) * NW * 0.01;                                           //Ignition angle         [deg]
+    case 0x1C: return MW - NW;                                                          //N/A                    [N/A]
+    case 0x1D: return ((MW < NW) ? 1 : 2);                                              //Map number             [Map1/Map2]
+    case 0x1E: return MW * NW * 1 / 12;                                                 //Knock correction depth [deg]
+    case 0x1F: return MW * NW * 1 / 2560;                                               //N/A                    [N/A]
+    case 0x20: return ToSigned(MW);                                                     //N/A                    [N/A]
+    case 0x21: return (MW / NW) * 100;                                                  //Load                   [%]
+    case 0x22: return (MW - 128) * NW * 0.01;                                           //Idle correction        [KW]
+    case 0x23: return MW * NW * 0.01;                                                   //Fuel rate              [l/h]
+    case 0x24: return To16Bit(NW, MW) * 10;                                             //Mileage                [km]
+    case 0x25: return To16Bit(NW, MW);                                                  //Text from table        [text]
+    case 0x26: return (MW - 128) * NW * 0.001;                                          //Segment correction     [KW]
+    case 0x27: return NW * MW * 1 / 255;                                                //Injection mass         [mg/h]
+    case 0x28: return ((NW * 255 + MW) - 4000) * 0.1;                                   //Current                [A]
+    case 0x29: return NW * 255 + MW;                                                    //Charge                 [N/A]
+    case 0x2A: return ((NW * 255 + MW) - 4000) * 0.1;                                   //Power                  [kW]
+    case 0x2B: return (NW * 255 + MW) * 0.1;                                            //Battery voltage        [V]
+    case 0x2C: return MW / 100.0 + NW;                                                  //Time                   [hh:mm]
+    case 0x2D: return MW * NW * 0.1;                                                    //Fuel rate              [l/km]
+    case 0x2E: return ((NW * 256) + MW - 32768) * 0.00275;                              //Segment correction     [KW]
+    case 0x2F: return (MW - 128) * NW;                                                  //Time correction        [ms]
+    case 0x30: return NW * 255 + MW;                                                    //N/A                    [N/A]
+    case 0x31: return NW * MW * 0.025;                                                  //Air mass per stroke    [mg/h]
+    case 0x32: return (MW - 128) * 100 / NW;                                            //Pressure               [mbar]
+    case 0x33: return (MW - 128) * NW / 255;                                            //Injection mass         [mg/h]
+    case 0x34: return (MW - 50) * NW * 0.02;                                            //Torque                 [Nm]
+    case 0x35: return ((MW - 128) * 256 + NW) / 180;                                    //Mass flow              [g/s]
+    case 0x36: return NW * 256 + MW;                                                    //Count                  [N/A]
+    case 0x37: return MW * NW * 0.005;                                                  //Time                   [s]
+    case 0x38: return (NWb << 8) & MWb;                                                 //Code for WSC16=0       [N/A]
+    case 0x39: return ((NWb << 8) & MWb) + 65536;                                       //Code for WSC16=1       [N/A]
+    case 0x3A: return ToSigned(MW) * 1.023;                                             //Misfires               [/s]
+    case 0x3B: return To16Bit(NW, MW) * 1 / 32768;                                      //Segment correction     [N/A]
+    case 0x3C: return To16Bit(NW, MW) * 1 / 100;                                        //Time resolution        [s]
+    case 0x3D: return (MW - 128) / NW;                                                  //Difference             [N/A]
+    case 0x3E: return MW * NW * 256 / 1000;                                             //Time                   [s]
+    //0x3F                                                                              //ASCII long text        [text]
+    case 0x40: return MW + NW;                                                          //Resistance             [Ohm]
+    case 0x41: return (MW - 127) * NW * 0.01;                                           //Distance               [mm]
+    case 0x42: return MW * NW / 512;                                                    //Voltage                [V]
+    case 0x43: return ToSigned(NW, MW) * 2.5;                                           //Steering angle         [deg]
+    case 0x44: return ToSigned(NW, MW) * 0.1358;                                        //Turn rate              [deg/s]
+    case 0x45: return ToSigned(NW, MW) * 0.3255;                                        //Pressure               [bar]
+    case 0x46: return ToSigned(NW, MW) * 0.192;                                         //Lat. acceleration      [m/s^2]
+    case 0x47: return MW * NW;                                                          //Distance               [cm]
+    case 0x48: return (NW * 255 + MW * (211 - NW)) / 4080;                              //Voltage                [V]
+    case 0x49: return NW * MW * 0.01;                                                   //Resistance             [Ohm]
+    case 0x4A: return 0.1 * NW * MW;                                                    //Time                   [months]
+    case 0x4B: return NW * 256 + MW;                                                    //Fault code             [N/A]
+    case 0x4C: return NW * 255 + MW;                                                    //Resistance             [kOhm]
+    case 0x4D: return (255 * NW + MW * 60) / 4080;                                      //Voltage                [V]
+    case 0x4E: return ToSigned(MW) * 1.819;                                             //Misfires               [/s]
+    case 0x4F: return MW;                                                               //Channel number         [N/A]
+    case 0x50: return To16Bit(NW, MW) / 100;                                            //Resistance             [kOhm]
+    case 0x51: return ToSigned(NW, MW) * 0.04375;                                       //Steering angle         [deg]
+    case 0x52: return ToSigned(NW, MW) * 0.00981;                                       //Lat. acceleration      [m/s^2]
+    case 0x53: return ToSigned(NW, MW) * 0.01;                                          //Pressure               [bar]
+    case 0x54: return ToSigned(NW, MW) * 0.0973;                                        //Long. acceleration     [m/s^2]
+    case 0x55: return ToSigned(NW, MW) * 0.002865;                                      //Turn rate              [deg/s]
+    case 0x56: return MW * NW * 0.1;                                                    //Current                [A]
+    case 0x57: return NW * (MW - 128) * 0.1;                                            //Turn rate              [deg/s]
+    case 0x58: return MW * NW * 0.01;                                                   //Resistance             [kOhm]
+    case 0x59: return NW * 256 + MW;                                                    //On-time                [h]
+    case 0x5A: return NW * MW * 0.1;                                                    //Weight                 [kg]
+    case 0x5B: return NW * (MW - 128) * 0.1;                                            //Steering angle         [deg]
+    case 0x5C: return NW * MW;                                                          //Mileage                [km]
+    case 0x5D: return (MW - 128) * NW * 0.001;                                          //Torque                 [Nm]
+    case 0x5E: return NW * (MW - 128) * 0.1;                                            //Torque                 [Nm]
+    //0x5F                                                                              //ASCII long text        [text]
+    case 0x60: return NW * MW * 0.1;                                                    //Pressure               [mbar]
+    case 0x61: return (MW - NW) * 5;                                                    //Cat-temperature        [degC]
+    case 0x62: return NW * MW * 0.1;                                                    //Impulses               [/km]
+    case 0x63: return ToSigned(NW, MW);                                                 //N/A                    [N/A]
+    case 0x64: return NW * MW * 0.1;                                                    //Pressure               [bar]
+    case 0x65: return MW * NW * 0.001;                                                  //Fuel level factor      [l/mm]
+    case 0x66: return MW * NW * 0.1;                                                    //Fuel level             [mm]
+    case 0x67: return NW + MW * 0.05;                                                   //Voltage                [V]
+    case 0x68: return (MW - 128) * NW * 0.2;                                            //Volume                 [ml]
+    case 0x69: return (MW - 128) * NW * 0.01;                                           //Distance               [m]
+    case 0x6A: return (MW - 128) * NW * 0.1;                                            //Speed                  [km/h]
+    case 0x6B: return ToSigned(NW, MW);                                                 //Hex bytes              [hex(NWb)hex(MWb)]
+    //0x6C                                                                              //Environment            [N/A]
+    //0x6D                                                                              //N/A                    [N/A]
+    //0x6E                                                                              //Workshop               [N/A]
+    case 0x6F: return 0x6F0000 | (NWb << 8) | MWb;                                      //Mileage                [km]
+    case 0x70: return (MW - 128) * NW * 0.001;                                          //Angle                  [deg]
+    case 0x71: return (MW - 128) * NW * 0.01;                                           //N/A                    [N/A]
+    case 0x72: return (MW - 128) * NW;                                                  //Altitude               [m]
+    case 0x73: return ToSigned(NW, MW);                                                 //Power                  [W]
+    case 0x74: return ToSigned(NW, MW);                                                 //RPM                    [/min]
+    case 0x75: return (MW - 64) * NW * 0.01;                                            //Temperature            [degC]
+    //0x76                                                                              //Hex bytes              [hex]
+    case 0x77: return MW * NW * 0.01;                                                   //Percentage             [%]
+    case 0x78: return MW * NW * 1.41;                                                   //Angle                  [deg]
+    case 0x79: return ((MW * 256) + NW) * 0.5;                                          //N/A                    [N/A]
+    case 0x7A: return ((MW * 256) + NW - 32768) * 0.01;                                 //N/A                    [N/A]
+    case 0x7B: return To16Bit(NW, MW);                                                  //Text from table        [text]
+    case 0x7C: return MW * NW * 0.1;                                                    //Current                [mA]
+    case 0x7D: return NW - MW;                                                          //Attenuation            [dB]
+    case 0x7E: return NW * MW * 0.1;                                                    //N/A                    [N/A]
+    case 0x7F: return                                                                   //Date                   [yyyy:mm:dd]
+      200000 + (MWb & 0x7F) * 100
+      + (((NWb & 0x07) << 1) | ((MWb & 0x80) >> 7))
+      + ((NWb & 0xF8) >> 3) * 0.01;
+    case 0x80: return MW * NW;                                                          //RPM                    [/min]
+    case 0x81: return MW * NW * 1 / 256;                                                //Load                   [%]
+    case 0x82: return MW * NW * 1 / 2560;                                               //Current                [A]
+    case 0x83: return (MW * NW * 0.5) - 30;                                             //Ignition angle         [deg]
+    case 0x84: return MW * NW * 0.5;                                                    //Throttle angle         [deg]
+    case 0x85: return MW * NW * 1 / 256;                                                //Voltage                [V]
+    case 0x86: return MW * NW;                                                          //Speed                  [km/h]
+    case 0x87: return MW * NW;                                                          //N/A                    [N/A]
+    case 0x88: return MWb & NWb;                                                        //Switch positions       [bin(MWb&nWb)]
+    case 0x89: return MW * NW * 0.01;                                                   //Injection time         [ms]
+    case 0x8A: return MW * NW * 0.001;                                                  //Knock sensor           [V]
+    //0x8B - values from table, unused                                                  //RPM                    [/min]
+    //0x8C - values from table, unused                                                  //Temperature            [degC]
+    //0x8D - text from table, unused                                                    //Text from table        [text]
+    case 0x8E: return To16Bit(NW, MW);                                                  //2 ASCII letters        [char(NWb)char(MWb)]
+    case 0x8F: return (MW - 128) * NW * 0.01;                                           //Ignition angle         [deg]
+    case 0x90: return MW * NW * 0.01;                                                   //Consumption            [l/h]
+    case 0x91: return MW * NW * 0.01;                                                   //Consumption            [N/A]
+    case 0x92: return 1 + ((MW - 128) * NW * 0.0001);                                   //Lambda factor          [N/A]
+    //0x93 - values from table, unused                                                  //Inclination            [%]
+    case 0x94: return (MW - 128) * NW * 0.25;                                           //Slip RPM               [N/A]
+    case 0x95: return (MW - 100) * NW * 0.1;                                            //Temperature            [degC]
+    case 0x96: return (256 * MW + NW) * 1 / 180;                                        //Mass flow              [g/s]
+    case 0x97: return (MW - 128) * NW * 0.01;                                           //Idle correction        [KW]
+    case 0x98: return NW * MW * 0.025;                                                  //Air mass per stroke    [mg/h]
+    case 0x99: return (MW - 128) * NW / 255;                                            //Injection quantity     [mg/h]
+    case 0x9A: return MW * NW;                                                          //Angle                  [deg]
+    case 0x9B: return (NW * MW * 0.01) - 90;                                            //Angle                  [deg]
+    case 0x9C: return To16Bit(NW, MW);                                                  //Distance               [cm]
+    case 0x9D: return ToSigned(NW, MW);                                                 //Distance               [cm]
+    case 0x9E: return To16Bit(NW, MW) * 0.01;                                           //Speed                  [km/h]
+    case 0x9F: return ((MW - 127) * 256 + NW) * 0.1;                                    //Temperature            [degC]
+    //0xA0                                                                              //N/A                    [N/A]
+    case 0xA1: return To16Bit(NW, MW);                                                  //Binary bytes           [bin(NWb)bin(MWb)]
+    case 0xA2: return NW * MW * 0.448;                                                  //Angle                  [deg]
+    case 0xA3: return MW / 100.0 + NW;                                                  //Time                   [hh:mm]
+    case 0xA4: return ((MW <= 100) ? MW : ((MW > 100 && MW <= 200) ? (MW - 100) : MW)); //Percentage             [%]
+    case 0xA5: return ((MW * 256) + NW - 32768);                                        //Current                [mA]
+    case 0xA6: return ToSigned(NW, MW) * 2.5;                                           //Turn rate              [deg/s]
+    case 0xA7: return MW * NW * 0.001;                                                  //Resistance             [mOhm]
+    case 0xA8: return (256 * NW + MW) * 0.01;                                           //Percentage             [%]
+    case 0xA9: return MW * NW + 200;                                                    //Nernst voltage         [mV]
+    case 0xAA: return MW * NW * 1 / 2560;                                               //Ammonia                [g]
+    case 0xAB: return MW * NW * 1 / 2560;                                               //Nitrogen oxide         [g]
+    case 0xAC: return MW * NW;                                                          //Nitrogen oxide         [mg/km]
+    case 0xAD: return MW * NW * 0.1;                                                    //NOx mass flow          [mg/s]
+    case 0xAE: return MW * NW * 0.01;                                                   //Average DEF            [km]
+    case 0xAF: return MW * NW * 0.005;                                                  //DEF pressure           [bar]
+    case 0xB0: return MW * NW * 0.1;                                                    //NOx concentration      [ppm]
+    case 0xB1: return ((NW - 128) * 256 + MW);                                          //Torque                 [Nm]
+    case 0xB2: return ((NW - 128) * 256 + MW) * ((double)6 / 51);                       //Turn rate              [deg/s]
+    case 0xB3: return (NW * 256 + MW) * 10;                                             //Quantity               [N/A]
+    case 0xB4: return MW * NW * 1 / 256;                                                //Mass flow              [kg/h]
+    case 0xB5: return MW * NW * 0.001;                                                  //Mass flow              [mg/s]
+  }
+
+  return 0.0 / 0.0;
 }
 
 /**
   Function:
     getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size, char str[], size_t string_size)
-    getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char str[], size_t string_size)
+    getMeasurementUnits(uint8_t formula, uint8_t measurement_data[], uint8_t measurement_data_length, char str[], size_t string_size)
   
   Parameters (1):
-    measurement_index       -> index of the measurement whose units are needed (0-4)
+    measurement_index       -> index of the measurement whose units must be determined (0-4)
     amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
-    measurement_buffer[]    -> array in which measurements have been stored by readGroup()
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
     measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
-    str[]                   -> string (character array) into which to copy the units
+    str                     -> string (character array) into which to copy the units
     string_size             -> total size of the given array (provided with the sizeof() operator)
   
   Parameters (2):
-    formula     -> byte returned by getFormula()
-    byte_a      -> byte returned by getByteA()
-    byte_b      -> byte returned by getByteB()
-    str[]       -> string (character array) into which to copy the units
-    string_size -> total size of the given array (provided with the sizeof() operator)
+    formula                 -> byte returned by getFormula()
+    measurement_data        -> buffer returned by getMeasurementData()
+    measurement_data_length -> byte returned by getMeasurementDataLength()
+    str                     -> string (character array) into which to copy the units
+    string_size             -> total size of the given array (provided with the sizeof() operator)
   
   Returns:
-    char* -> the same character array provided (str), to be able to use it like "Serial.println(getMeasurementUnits(...))"
+    char* -> the same character array provided (str)
   
   Description:
     Provides a string containing the proper units for a measurement from a buffer filled by readGroup().
   
   Notes:
-    *It is a static function so it does not require an instance to be used.
+    *It is a static function, so it does not require an instance to be used.
 */
 char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size)
 {
-  //Check if the array is large enough to contain as many measurements as "declared" by the value given.
-  if (measurement_buffer_size < amount_of_measurements * 3) {
-    amount_of_measurements = measurement_buffer_size / 3;
-  }
+  //Determine the formula.
+  uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   
-  //If the requested index is out of range (or the buffer doesn't contain measurements), return an empty string.
-  if (measurement_index >= amount_of_measurements) {
-    if (string_size) {
-      str[0] = '\0';
-    }
-    return str;
-  }
-  
-  //Get the three important values from the buffer based on the requested index.
-  uint8_t formula = measurement_buffer[3 * measurement_index];
-  uint8_t a       = measurement_buffer[3 * measurement_index + 1];
-  uint8_t b       = measurement_buffer[3 * measurement_index + 2];
+  //Determine the measurement data and length.
+  uint8_t *measurement_data = getMeasurementData(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  uint8_t measurement_data_length = getMeasurementDataLength(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   
   //Use the other function.
-  return getMeasurementUnits(formula, a, b, str, string_size);
+  return getMeasurementUnits(formula, measurement_data, measurement_data_length, str, string_size);
 }
 
-char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint8_t byte_b, char* str, size_t string_size)
+char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size)
 {
-  //This pointer will point to one of the strings stored in PROGMEM from "units.h", which will be copied into the given string.
-  const char* unit_pointer = nullptr;
-  
-  switch (formula) {
-    case 0x01:
-    case 0x74:
-    case 0x80:
-    case 0x8B:
-      unit_pointer = KWP_units_RPM;
-      break;
-    
-    case 0x02:
-    case 0x14:
-    case 0x17:
-    case 0x21:
-    case 0x77:
-    case 0x81:
-    case 0x93:
-    case 0xA4:
-    case 0xA8:
-      unit_pointer = KWP_units_Percentage;
-      break;
-    
-    case 0x03:
-    case 0x09:
-    case 0x1E:
-    case 0x43:
-    case 0x51:
-    case 0x5B:
-    case 0x70:
-    case 0x78:
-    case 0x84:
-    case 0x8F:
-    case 0x9A:
-    case 0x9B:
-    case 0xA2:
-      unit_pointer = KWP_units_Angle;
-      break;
-    
-    case 0x04:
-      unit_pointer = (byte_b < 127) ? KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
-      break;
-    
-    case 0x05:
-    case 0x1A:
-    case 0x61:
-    case 0x75:
-    case 0x8C:
-    case 0x95:
-    case 0x9F:
-      unit_pointer = KWP_units_Temperature;
-      break;
-    
-    case 0x06:
-    case 0x15:
-    case 0x2B:
-    case 0x42:
-    case 0x48:
-    case 0x4D:
-    case 0x67:
-    case 0x85:
-    case 0x8A:
-      unit_pointer = KWP_units_Voltage;
-      break;
-    
-    case 0x07:
-    case 0x6A:
-    case 0x86:
-    case 0x9E:
-      unit_pointer = KWP_units_Speed;
-      break;
-    
-    case 0x0A:
-      unit_pointer = byte_b ? KWP_units_Warm : KWP_units_Cold;
-      break;
-    
-    case 0x0C:
-    case 0x40:
-    case 0x49:
-      unit_pointer = KWP_units_Resistance;
-      break;
-    
-    case 0x0D:
-    case 0x41:
-    case 0x66:
-      unit_pointer = KWP_units_Distance_m;
-      break;
-    
-    case 0x0E:
-    case 0x45:
-    case 0x53:
-    case 0x64:
-    case 0xAF:
-      unit_pointer = KWP_units_Pressure;
-      break;
-    
-    case 0x0F:
-    case 0x16:
-    case 0x2F:
-    case 0x89:
-      unit_pointer = KWP_units_Time_m;
-      break;
-    
-    case 0x10:
-    case 0x88:
-      for (uint8_t i = 0; i < ((string_size < 8) ? string_size : 8); i++) {
-        if (byte_a & (1 << (7 - i))) {
-          if (byte_b & (1 << (7 - i))) {
-            str[i] = '1';
-          }
-          else {
-            str[i] = '0';
-          }
-        }
-        else {
-          str[i] = ' ';
-        }
-      }
-      
-      if (string_size > 8) {
-        str[8] = '\0';
-      }
-      else if (string_size) {
-        str[string_size - 1] = '\0';
-      }
-      return str;
-    
-    case 0x11:
-    case 0x8E:
-      if (string_size > 0) {
-        str[0] = byte_a;
-      }
-      
-      if (string_size > 1) {
-        str[1] = byte_b;
-      }
-      
-      if (string_size > 2) {
-        str[2] = '\0';
-      }
-      else if (string_size) {
-        str[string_size - 1] = '\0';
-      }
-      return str;
-    
-    case 0x2C:
-      snprintf(str, string_size, "%02d:%02d", byte_a, byte_b);
-      
-      if (string_size) {
-        str[string_size - 1] = '\0';
-      }
-      return str;
-    
-    case 0x12:
-    case 0x32:
-    case 0x60:
-      unit_pointer = KWP_units_Pressure_m;
-      break;
-    
-    case 0x13:
-      unit_pointer = KWP_units_Volume;
-      break;
-    
-    case 0x18:
-    case 0x28:
-    case 0x56:
-    case 0x82:
-      unit_pointer = KWP_units_Current;
-      break;
-    
-    case 0x19:
-    case 0x35:
-    case 0x96:
-      unit_pointer = KWP_units_Mass_Flow;
-      break;
-    
-    case 0x1B:
-      unit_pointer = (byte_b < 128) ? KWP_units_Ignition_ATDC : KWP_units_Ignition_BTDC;
-      break;
-    
-    case 0x1D:
-      unit_pointer =  (byte_b < byte_a) ? KWP_units_Map1 : KWP_units_Map2;
-      break;
-    
-    case 0x22:
-      unit_pointer = KWP_units_Correction;
-      break;
-    
-    case 0x23:
-    case 0x90:
-      unit_pointer = KWP_units_Consumption_h;
-      break;
-    
-    case 0x24:
-    case 0x5C:
-    case 0x6F:
-      unit_pointer = KWP_units_Distance_k;
-      break;
-    
-    case 0x26:
-    case 0x2E:
-    case 0x97:
-      unit_pointer = KWP_units_Segment_Correction;
-      break;
-    
-    case 0x27:
-    case 0x31:
-    case 0x33:
-    case 0x98:
-    case 0x99:
-      unit_pointer = KWP_units_Mass_Per_Stroke_m;
-      break;
-    
-    case 0x29:
-      unit_pointer = KWP_units_Capacity;
-      break;
-    
-    case 0x2A:
-      unit_pointer = KWP_units_Power_k;
-      break;
-    
-    case 0x2D:
-    case 0x91:
-      unit_pointer = KWP_units_Consumption_100km;
-      break;
-    
-    case 0x34:
-    case 0x5D:
-    case 0x5E:
-    case 0xB1:
-      unit_pointer = KWP_units_Torque;
-      break;
-    
-    case 0x37:
-    case 0x3C:
-    case 0x3E:
-      unit_pointer = KWP_units_Time;
-      break;
-    
-    case 0x3A:
-    case 0x4E:
-      unit_pointer = KWP_units_Misfires;
-      break;
-    
-    case 0x44:
-    case 0x55:
-    case 0x57:
-    case 0xA6:
-    case 0xB2:
-      unit_pointer = KWP_units_Turn_Rate;
-      break;
-    
-    case 0x46:
-    case 0x52:
-    case 0x54:
-      unit_pointer = KWP_units_Acceleration;
-      break;
-    
-    case 0x47:
-    case 0x9C:
-    case 0x9D:
-      unit_pointer = KWP_units_Distance_c;
-      break;
-    
-    case 0x4A:
-      unit_pointer = KWP_units_Time_mo;
-      break;
-    
-    case 0x4C:
-    case 0x50:
-    case 0x58:
-      unit_pointer = KWP_units_Resistance_k;
-      break;
-    
-    case 0x59:
-    case 0xA3:
-      unit_pointer = KWP_units_Time_h;
-      break;
-    
-    case 0x5A:
-      unit_pointer = KWP_units_Mass_k;
-      break;
-    
-    case 0x62:
-      unit_pointer = KWP_units_Impulses;
-      break;
-    
-    case 0x65:
-      unit_pointer = KWP_units_Fuel_Level_Factor;
-      break;
-    
-    case 0x68:
-      unit_pointer = KWP_units_Volume_m;
-      break;
-    
-    case 0x69:
-    case 0x72:
-      unit_pointer = KWP_units_Distance;
-      break;
-    
-    case 0x6B:
-      snprintf(str, string_size, "%02X %02X", byte_a, byte_b);
-      
-      if (string_size) {
-        str[string_size - 1] = '\0';
-      }
-      return str;
-    
-    case 0x73:
-      unit_pointer = KWP_units_Power;
-      break;
-    
-    case 0x7C:
-    case 0xA5:
-      unit_pointer = KWP_units_Current_m;
-      break;
-    
-    case 0x7D:
-      unit_pointer = KWP_units_Attenuation;
-      break;
-    
-    case 0x83:
-      unit_pointer = ((float(byte_a) * float(byte_b) / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
-      break;
-    
-    case 0xA1:
-      snprintf(str, string_size, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte_a), BYTE_TO_BINARY(byte_b));
-      
-      if (string_size) {
-        str[string_size - 1] = '\0';
-      }
-      return str;
-    
-    case 0xA7:
-      unit_pointer = KWP_units_Resistance_m;
-      break;
-    
-    case 0xA9:
-      unit_pointer = KWP_units_Voltage_m;
-      break;
-    
-    case 0xAA:
-    case 0xAB:
-      unit_pointer = KWP_units_Mass;
-      break;
-    
-    case 0xAC:
-      unit_pointer = KWP_units_Mass_Flow_km;
-      break;
-    
-    case 0xAD:
-    case 0xB5:
-      unit_pointer = KWP_units_Mass_Flow_m;
-      break;
-    
-    case 0xAE:
-      unit_pointer = KWP_units_Consumption_1000km;
-      break;
-    
-    case 0xB0:
-      unit_pointer = KWP_units_Parts_Per_Million;
-      break;
-    
-    case 0xB4:
-      unit_pointer = KWP_units_Mass_Per_Stroke_k;
-      break;
-    
-    //Text from table
-    case 0x25:
-    case 0x7B:
-      {
-        #ifdef KWP1281_TEXT_TABLE_SUPPORTED
-          uint16_t code = (byte_a << 8) | byte_b;
-          
-          if (code < (sizeof(formula_string_table) / sizeof(formula_string_table[0])))
-          {
-            unit_pointer = (const char*)READ_POINTER_FROM_PROGMEM(formula_string_table + code);
-          }
-          
-          if (!unit_pointer) {
-            if (string_size) {
-              str[0] = '\0';
-            }
-            return str;
-          }
-          
-          strncpy_P(str, unit_pointer, string_size);
-          
-          if (string_size) {
-            str[string_size - 1] = '\0';
-          }
-        #else
-          strncpy(str, "EN_f25", string_size);
-          
-          if (string_size) {
-            str[string_size - 1] = '\0';
-          }
-        #endif
-      }
-      return str;
-    
-    //Date
-    case 0x7F:
-      snprintf(str, string_size, "%04d.%02d.%02d", 2000 + (byte_b & 0x7F), ((byte_a & 0x07) << 1) | ((byte_b & 0x80) >> 7), (byte_a & 0xF8) >> 3);
-      
-      if (string_size) {
-        str[string_size - 1] = '\0';
-      }
-      return str;
-    
-    default:
-      if (string_size)  {
-        str[0] = '\0';
-      }
-      return str;
+  //If an invalid buffer was provided, return an invalid string.
+  if (!measurement_data || !measurement_data_length || !str || !string_size)
+  {
+    return nullptr;
   }
   
-  strncpy_P(str, unit_pointer, string_size);
-  if (string_size) {
+  //Clear the string, so it's returned empty if the units cannot be determined.
+  str[0] = '\0';
+  
+  //Handle formulas 3F, 5F, 76.
+  if (is_long_block(formula))
+  {
+    switch (formula)
+    {
+      //ASCII long text
+      case 0x3F:
+      case 0x5F:
+      {
+        //Copy the text to the string.
+        size_t bytes_to_copy = (measurement_data_length < (string_size - 1) ? measurement_data_length : (string_size - 1));
+        memcpy(str, measurement_data, bytes_to_copy);
+        str[bytes_to_copy] = '\0';
+      }
+      break;
+      
+      //Hex bytes
+      case 0x76:
+      {
+        //Determine how many hex bytes fit in the string (2 characters per byte).
+        size_t max_hex_bytes_in_string = (string_size - 1) / 2;
+        size_t bytes_to_copy = (measurement_data_length < max_hex_bytes_in_string) ? measurement_data_length : max_hex_bytes_in_string;
+        
+        //Add each hex byte to the string.
+        for (size_t i = 0; i < bytes_to_copy; i++)
+        {
+          char hex_byte[3];
+          sprintf(hex_byte, "%02X", measurement_data[i]);
+          strcat(str, hex_byte);
+        }
+      }
+      break;
+    }
+    
+    return str;
+  }
+  //Handle all other formulas.
+  else
+  {
+    //Get the two significant data bytes.
+    uint8_t byte_a = measurement_data[0], byte_b = measurement_data[1];
+    
+    //This will point to one of the strings stored in PROGMEM from "units.h", which will be copied into the given string.
+    const char* unit_pointer = nullptr;
+    
+    switch (formula) {
+      case 0x01:
+      case 0x74:
+      case 0x80:
+      case 0x8B:
+        unit_pointer = KWP_units_RPM;
+        break;
+      
+      case 0x02:
+      case 0x14:
+      case 0x17:
+      case 0x21:
+      case 0x77:
+      case 0x81:
+      case 0x93:
+      case 0xA4:
+      case 0xA8:
+        unit_pointer = KWP_units_Percentage;
+        break;
+      
+      case 0x03:
+      case 0x09:
+      case 0x1E:
+      case 0x43:
+      case 0x51:
+      case 0x5B:
+      case 0x70:
+      case 0x78:
+      case 0x84:
+      case 0x8F:
+      case 0x9A:
+      case 0x9B:
+      case 0xA2:
+        unit_pointer = KWP_units_Angle;
+        break;
+      
+      case 0x04:
+        unit_pointer = (byte_b < 127) ? KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
+        break;
+      
+      case 0x05:
+      case 0x1A:
+      case 0x61:
+      case 0x75:
+      case 0x8C:
+      case 0x95:
+      case 0x9F:
+        unit_pointer = KWP_units_Temperature;
+        break;
+      
+      case 0x06:
+      case 0x15:
+      case 0x2B:
+      case 0x42:
+      case 0x48:
+      case 0x4D:
+      case 0x67:
+      case 0x85:
+      case 0x8A:
+        unit_pointer = KWP_units_Voltage;
+        break;
+      
+      case 0x07:
+      case 0x6A:
+      case 0x86:
+      case 0x9E:
+        unit_pointer = KWP_units_Speed;
+        break;
+      
+      case 0x0A:
+        unit_pointer = byte_b ? KWP_units_Warm : KWP_units_Cold;
+        break;
+      
+      case 0x0C:
+      case 0x40:
+      case 0x49:
+        unit_pointer = KWP_units_Resistance;
+        break;
+      
+      case 0x0D:
+      case 0x41:
+      case 0x66:
+        unit_pointer = KWP_units_Distance_m;
+        break;
+      
+      case 0x0E:
+      case 0x45:
+      case 0x53:
+      case 0x64:
+      case 0xAF:
+        unit_pointer = KWP_units_Pressure;
+        break;
+      
+      case 0x0F:
+      case 0x16:
+      case 0x2F:
+      case 0x89:
+        unit_pointer = KWP_units_Time_m;
+        break;
+      
+      case 0x10:
+      case 0x88:
+        for (uint8_t i = 0; i < ((string_size < 8) ? string_size : 8); i++) {
+          if (byte_a & (1 << (7 - i))) {
+            if (byte_b & (1 << (7 - i))) {
+              str[i] = '1';
+            }
+            else {
+              str[i] = '0';
+            }
+          }
+          else {
+            str[i] = ' ';
+          }
+        }
+        
+        if (string_size > 8) {
+          str[8] = '\0';
+        }
+        else {
+          str[string_size - 1] = '\0';
+        }
+        return str;
+      
+      case 0x11:
+      case 0x8E:
+        if (string_size > 0) {
+          str[0] = byte_a;
+        }
+        
+        if (string_size > 1) {
+          str[1] = byte_b;
+        }
+        
+        if (string_size > 2) {
+          str[2] = '\0';
+        }
+        else {
+          str[string_size - 1] = '\0';
+        }
+        return str;
+      
+      case 0x2C:
+        snprintf(str, string_size, "%02d:%02d", byte_a, byte_b);
+        str[string_size - 1] = '\0';
+        return str;
+      
+      case 0x12:
+      case 0x32:
+      case 0x60:
+        unit_pointer = KWP_units_Pressure_m;
+        break;
+      
+      case 0x13:
+        unit_pointer = KWP_units_Volume;
+        break;
+      
+      case 0x18:
+      case 0x28:
+      case 0x56:
+      case 0x82:
+        unit_pointer = KWP_units_Current;
+        break;
+      
+      case 0x19:
+      case 0x35:
+      case 0x96:
+        unit_pointer = KWP_units_Mass_Flow;
+        break;
+      
+      case 0x1B:
+        unit_pointer = (byte_b < 128) ? KWP_units_Ignition_ATDC : KWP_units_Ignition_BTDC;
+        break;
+      
+      case 0x1D:
+        unit_pointer =  (byte_b < byte_a) ? KWP_units_Map1 : KWP_units_Map2;
+        break;
+      
+      case 0x22:
+        unit_pointer = KWP_units_Correction;
+        break;
+      
+      case 0x23:
+      case 0x90:
+        unit_pointer = KWP_units_Consumption_h;
+        break;
+      
+      case 0x24:
+      case 0x5C:
+      case 0x6F:
+        unit_pointer = KWP_units_Distance_k;
+        break;
+      
+      case 0x26:
+      case 0x2E:
+      case 0x97:
+        unit_pointer = KWP_units_Segment_Correction;
+        break;
+      
+      case 0x27:
+      case 0x31:
+      case 0x33:
+      case 0x98:
+      case 0x99:
+        unit_pointer = KWP_units_Mass_Per_Stroke_m;
+        break;
+      
+      case 0x29:
+        unit_pointer = KWP_units_Capacity;
+        break;
+      
+      case 0x2A:
+        unit_pointer = KWP_units_Power_k;
+        break;
+      
+      case 0x2D:
+      case 0x91:
+        unit_pointer = KWP_units_Consumption_100km;
+        break;
+      
+      case 0x34:
+      case 0x5D:
+      case 0x5E:
+      case 0xB1:
+        unit_pointer = KWP_units_Torque;
+        break;
+      
+      case 0x37:
+      case 0x3C:
+      case 0x3E:
+        unit_pointer = KWP_units_Time;
+        break;
+      
+      case 0x3A:
+      case 0x4E:
+        unit_pointer = KWP_units_Misfires;
+        break;
+      
+      case 0x44:
+      case 0x55:
+      case 0x57:
+      case 0xA6:
+      case 0xB2:
+        unit_pointer = KWP_units_Turn_Rate;
+        break;
+      
+      case 0x46:
+      case 0x52:
+      case 0x54:
+        unit_pointer = KWP_units_Acceleration;
+        break;
+      
+      case 0x47:
+      case 0x9C:
+      case 0x9D:
+        unit_pointer = KWP_units_Distance_c;
+        break;
+      
+      case 0x4A:
+        unit_pointer = KWP_units_Time_mo;
+        break;
+      
+      case 0x4C:
+      case 0x50:
+      case 0x58:
+        unit_pointer = KWP_units_Resistance_k;
+        break;
+      
+      case 0x59:
+      case 0xA3:
+        unit_pointer = KWP_units_Time_h;
+        break;
+      
+      case 0x5A:
+        unit_pointer = KWP_units_Mass_k;
+        break;
+      
+      case 0x62:
+        unit_pointer = KWP_units_Impulses;
+        break;
+      
+      case 0x65:
+        unit_pointer = KWP_units_Fuel_Level_Factor;
+        break;
+      
+      case 0x68:
+        unit_pointer = KWP_units_Volume_m;
+        break;
+      
+      case 0x69:
+      case 0x72:
+        unit_pointer = KWP_units_Distance;
+        break;
+      
+      case 0x6B:
+        snprintf(str, string_size, "%02X %02X", byte_a, byte_b);
+        str[string_size - 1] = '\0';
+        return str;
+      
+      case 0x73:
+        unit_pointer = KWP_units_Power;
+        break;
+      
+      case 0x7C:
+      case 0xA5:
+        unit_pointer = KWP_units_Current_m;
+        break;
+      
+      case 0x7D:
+        unit_pointer = KWP_units_Attenuation;
+        break;
+      
+      case 0x83:
+        unit_pointer = ((float(byte_a) * float(byte_b) / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
+        break;
+      
+      case 0xA1:
+        snprintf(str, string_size, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte_a), BYTE_TO_BINARY(byte_b));
+        str[string_size - 1] = '\0';
+        return str;
+      
+      case 0xA7:
+        unit_pointer = KWP_units_Resistance_m;
+        break;
+      
+      case 0xA9:
+        unit_pointer = KWP_units_Voltage_m;
+        break;
+      
+      case 0xAA:
+      case 0xAB:
+        unit_pointer = KWP_units_Mass;
+        break;
+      
+      case 0xAC:
+        unit_pointer = KWP_units_Mass_Flow_km;
+        break;
+      
+      case 0xAD:
+      case 0xB5:
+        unit_pointer = KWP_units_Mass_Flow_m;
+        break;
+      
+      case 0xAE:
+        unit_pointer = KWP_units_Consumption_1000km;
+        break;
+      
+      case 0xB0:
+        unit_pointer = KWP_units_Parts_Per_Million;
+        break;
+      
+      case 0xB4:
+        unit_pointer = KWP_units_Mass_Per_Stroke_k;
+        break;
+      
+      //Text from table
+      case 0x25:
+      case 0x7B:
+        {
+          #ifdef KWP1281_TEXT_TABLE_SUPPORTED
+            
+            //Construct the text code from the two bytes.
+            uint16_t code = (byte_a << 8) | byte_b;
+            
+            //The text code will be used as the key for a binary search.
+            struct keyed_struct bsearch_key;
+            bsearch_key.code = code;
+
+            //Binary search the key in the text table.
+            struct keyed_struct *result = (struct keyed_struct *)bsearch(
+              &bsearch_key, text_table_entries, ARRAYSIZE(text_table_entries),
+              sizeof(struct keyed_struct), compare_keyed_structs);
+            
+            //If the text is found, copy it into the string.
+            if (result)
+            {
+              //Retrieve the structure from PROGMEM.
+              keyed_struct struct_from_PGM;
+              memcpy_P((void*)&struct_from_PGM, result, sizeof(keyed_struct));
+              
+              //Copy the description string.
+              strncpy_P(str, struct_from_PGM.text, string_size);
+              str[string_size - 1] = '\0';
+            }
+            //Otherwise, clear the string.
+            else
+            {
+              str[0] = '\0';
+            }
+            
+          #else
+            
+            strncpy(str, "EN_f25", string_size);
+            str[string_size - 1] = '\0';
+            
+          #endif
+        }
+        return str;
+      
+      //Date
+      case 0x7F:
+        snprintf(str, string_size, "%04d.%02d.%02d", 2000 + (byte_b & 0x7F), ((byte_a & 0x07) << 1) | ((byte_b & 0x80) >> 7), (byte_a & 0xF8) >> 3);
+        str[string_size - 1] = '\0';
+        return str;
+      
+      default:
+        str[0] = '\0';
+        return str;
+    }
+    
+    strncpy_P(str, unit_pointer, string_size);
     str[string_size - 1] = '\0';
   }
   
@@ -2404,11 +2790,57 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint
 
 /**
   Function:
-    readROM(uint8_t chunk_size, uint16_t start_address, uint8_t memory_buffer[], uint8_t memory_buffer_size)
+    getMeasurementDecimals(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    getMeasurementDecimals(uint8_t formula)
+  
+  Parameters (1):
+    measurement_index       -> index of the measurement whose recommended decimals must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    formula -> byte returned by getFormula()
+  
+  Returns:
+    uint8_t -> recommended decimal places
+  
+  Description:
+    Determines the recommended decimal places of a measurement from a buffer filled by readGroup().
+  
+  Notes:
+    *If an invalid measurement_index is specified, the returned value is 0.
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getMeasurementDecimals(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
+{
+  //Determine the formula.
+  uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  
+  //Use the other function.
+  return getMeasurementDecimals(formula);
+}
+
+uint8_t KLineKWP1281Lib::getMeasurementDecimals(uint8_t formula)
+{
+  //Get the value from the table.
+  if (formula < sizeof(KWP_decimals_table))
+  {
+    return KWP_decimals_table[formula];
+  }
+
+  return 0;
+}
+
+/**
+  Function:
+    readROM(uint8_t chunk_size, uint16_t start_address, size_t &bytes_received, uint8_t memory_buffer[], uint8_t memory_buffer_size)
   
   Parameters:
     chunk_size         -> how many bytes to read
-    memory_buffer[]    -> array into which to store the bytes read
+    start_address      -> address from which to start reading
+    bytes_received     -> how many bytes were read
+    memory_buffer      -> array into which to store the bytes read
     memory_buffer_size -> total (maximum) length of the given array
   
   Returns:
@@ -2419,13 +2851,8 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t byte_a, uint
   
   Description:
     Reads a chunk of ROM/EEPROM.
-  
-  Notes:
-    *If reading is successful, the first byte in the buffer represents the total amount of bytes of memory.
-    *After the first byte, the bytes of memory are stored.
-    *It is possible to call the function without parameters, for debugging purposes (nothing will be stored anywhere).
 */
-KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readROM(uint8_t chunk_size, uint16_t start_address, uint8_t* memory_buffer, uint8_t memory_buffer_size)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readROM(uint8_t chunk_size, uint16_t start_address, size_t &bytes_received, uint8_t* memory_buffer, uint8_t memory_buffer_size)
 {
   uint8_t start_address_high_byte = start_address >> 8;
   uint8_t start_address_low_byte = start_address & 0xFF;
@@ -2436,7 +2863,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readROM(uint8_t chunk_size, ui
     return ERROR;
   }
   
-  switch (receive(memory_buffer, memory_buffer_size)) {
+  switch (receive(bytes_received, memory_buffer, memory_buffer_size)) {
     case TYPE_ACK:
     case TYPE_REFUSE:
       show_debug_info(READ_ROM_NOT_SUPPORTED);
@@ -2454,10 +2881,10 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readROM(uint8_t chunk_size, ui
 
 /**
   Function:
-    outputTests(uint16_t &returned_ID)
+    outputTests(uint16_t &current_output_test)
   
   Parameters:
-    &returned_ID -> will contain the currently running output test ID
+    &current_output_test -> will contain the currently running output test ID
   
   Returns:
     executionStatus -> whether or not the operation executed successfully
@@ -2469,34 +2896,82 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readROM(uint8_t chunk_size, ui
     Performs an output test.
   
   Notes:
-    *Output tests are always performed in a sequenced that cannot be changed.
+    *Output tests are always performed in a sequence that cannot be changed.
     *To go through them all, use multiple calls of outputTests() until FAIL is returned.
-    *The currently running test ID is stored in the variable passed by reference.
+    *The currently running test ID is stored in current_output_test.
+    *Get a description of the currently running test with the getOutputTestDescription() function.
 */
-KLineKWP1281Lib::executionStatus KLineKWP1281Lib::outputTests(uint16_t &returned_ID)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::outputTests(uint16_t &current_output_test)
 {
   uint8_t parameters[] = {0x00};
   send(KWP_REQUEST_OUTPUT_TEST, parameters, sizeof(parameters));
   
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  size_t bytes_received;
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_REFUSE:
       show_debug_info(OUTPUT_TESTS_NOT_SUPPORTED);
       return FAIL;
     
     case TYPE_OUTPUT_TEST:
       show_debug_info(RECEIVED_OUTPUT_TEST);
-      returned_ID = (_receive_buffer[1] << 8) | _receive_buffer[2];
+      current_output_test = (_receive_buffer[0] << 8) | _receive_buffer[1];
       return SUCCESS;
     
     case TYPE_ACK:
       show_debug_info(END_OF_OUTPUT_TESTS);
-      returned_ID = 0;
+      current_output_test = 0;
       return FAIL;
     
     default:
       show_debug_info(UNEXPECTED_RESPONSE);
       return ERROR;
   }
+}
+
+/**
+  Function:
+    getOutputTestDescription(uint16_t output_test, char[] str, size_t string_size)
+  
+  Parameters:
+    output_test -> output test ID, given by outputTests()
+    str         -> string (character array) into which to copy the description string
+    string_size -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    char* -> the same character array provided (str)
+  
+  Description:
+    Provides the description string for an output test ID given by outputTests().
+  
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+char* KLineKWP1281Lib::getOutputTestDescription(uint16_t output_test, char* str, size_t string_size)
+{
+  //The output test ID is technically just a fault code.
+  return getFaultDescription(output_test, str, string_size);
+}
+
+/**
+  Function:
+    getOutputTestDescriptionLength(uint16_t output_test)
+  
+  Parameters:
+    output_test -> output test ID, given by outputTests()
+  
+  Returns:
+    size_t -> string length
+  
+  Description:
+    Provides the length of the description string for an output test ID given by outputTests().
+  
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+size_t KLineKWP1281Lib::getOutputTestDescriptionLength(uint16_t output_test)
+{
+  //The output test ID is technically just a fault code.
+  return getFaultDescriptionLength(output_test);
 }
 
 ///PRIVATE
@@ -2597,11 +3072,9 @@ void KLineKWP1281Lib::bitbang_5baud(uint8_t module)
 */
 KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
 {
-  bool extra_info_available = false;
-  uint8_t string_length;
-  
   //1. VAG part number
-  RETURN_TYPE ret_val = receive(_receive_buffer, sizeof(_receive_buffer));
+  size_t bytes_received;
+  RETURN_TYPE ret_val = receive(bytes_received, _receive_buffer, sizeof(_receive_buffer));
   
   //In the receive() function above, if the module has just been initialized, it send the protocol identification bytes again.
   //After that, it will not happen again, so reset this flag.
@@ -2622,16 +3095,16 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
   }
   
   //The top bit in the first byte indicates whether or not there is extra identification available.
-  if (_receive_buffer[1] & 0x80) {
+  bool extra_info_available = false;
+  if (_receive_buffer[0] & 0x80) {
     extra_info_available = true;
     
     //Strip that bit away, leaving only the 7-bit ASCII character.
-    _receive_buffer[1] &= ~(1 << 7);
+    _receive_buffer[0] &= ~(1 << 7);
   }
   
   //Copy the string from the buffer to the struct.
-  string_length = _receive_buffer[0];
-  memcpy(identification_data.part_number, _receive_buffer + 1, string_length);
+  memcpy(identification_data.part_number, _receive_buffer, bytes_received);
   
   //Confirm receiving of the message and request the next.
   if (!acknowledge()) {
@@ -2639,11 +3112,9 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     return ERROR;
   }
   
-  //2. Regular identification
-  uint8_t identification_string_index = 0;
-  
+  //2. Regular identification  
   //Part 1
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_ACK:
       show_debug_info(NO_ID_PART1_AVAILABLE);
       return SUCCESS;
@@ -2658,10 +3129,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
   }
   
   //Copy the string from the buffer to the struct.
-  string_length = _receive_buffer[0];
-  memcpy(identification_data.identification, _receive_buffer + 1, string_length);
-  
-  identification_string_index += string_length;
+  memcpy(identification_data.identification, _receive_buffer, bytes_received);
+  size_t identification_string_index = bytes_received;
   
   //Confirm receiving of the message and request the next.
   if (!acknowledge()) {
@@ -2670,7 +3139,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
   }
   
   //Part 2
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_ACK:
       show_debug_info(NO_ID_PART2_AVAILABLE);
       return SUCCESS;
@@ -2685,8 +3154,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
   }
   
   //Copy the string from the buffer to the struct, without overwriting the first part.
-  string_length = _receive_buffer[0];
-  memcpy(identification_data.identification + identification_string_index, _receive_buffer + 1, string_length);
+  memcpy(identification_data.identification + identification_string_index, _receive_buffer, bytes_received);
   
   //Confirm receiving of the message and request the next.
   if (!acknowledge()) {
@@ -2695,7 +3163,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
   }
   
   //3. Coding, WSC
-  switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+  switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
     case TYPE_ACK:
       show_debug_info(NO_CODING_WSC_AVAILABLE);
       break;
@@ -2710,9 +3178,9 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
   }
   
   //Extract the received coding value and workshop code.
-  if (_receive_buffer[0] == 5) {
-    identification_data.coding = ((_receive_buffer[2] << 8) | _receive_buffer[3]) >> 1;
-    identification_data.workshop_code = (uint32_t(_receive_buffer[3] & 0x01) << 16) | uint16_t(_receive_buffer[4] << 8) | _receive_buffer[5];
+  if (bytes_received == 5) {
+    identification_data.coding = ((_receive_buffer[1] << 8) | _receive_buffer[2]) >> 1;
+    identification_data.workshop_code = (uint32_t(_receive_buffer[2] & 0x01) << 16) | uint16_t(_receive_buffer[3] << 8) | _receive_buffer[4];
   }
   //A control module may send a coding+WSC field with a data length of 1 instead of 5, which means coding is not supported, or may send an acknowledgement.
   else {
@@ -2723,8 +3191,6 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     //4. Extra identification
     show_debug_info(EXTRA_ID_AVAILABLE);
     
-    uint8_t extra_identification_string_index = 0;
-    
     //Request extra identification.
     if (!send(KWP_REQUEST_EXTRA_ID)) {
       show_debug_info(SEND_ERROR);
@@ -2732,7 +3198,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     }
     
     //Part 1
-    switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+    switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
       case TYPE_ACK:
         show_debug_info(NO_EXTRA_ID_PART1_AVAILABLE);
         return FAIL;
@@ -2747,10 +3213,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     }
     
     //Copy the string from the buffer to the struct.
-    string_length = _receive_buffer[0];
-    memcpy(identification_data.extra_identification, _receive_buffer + 1, string_length);
-    
-    extra_identification_string_index += string_length;
+    memcpy(identification_data.extra_identification, _receive_buffer, bytes_received);
+    size_t extra_identification_string_index = bytes_received;
     
     //Confirm receiving of the message and request the next.
     if (!acknowledge()) {
@@ -2759,7 +3223,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     }
     
     //Part 2
-    switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+    switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
       case TYPE_ACK:
         show_debug_info(NO_EXTRA_ID_PART2_AVAILABLE);
         return SUCCESS;
@@ -2774,10 +3238,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     }
     
     //Copy the string from the buffer to the struct, without overwriting the first part.
-    string_length = _receive_buffer[0];
-    memcpy(identification_data.extra_identification + extra_identification_string_index, _receive_buffer + 1, string_length);
-    
-    extra_identification_string_index += string_length;
+    memcpy(identification_data.extra_identification + extra_identification_string_index, _receive_buffer, bytes_received);
+    extra_identification_string_index += bytes_received;
     
     //Confirm receiving of the message and request the next.
     if (!acknowledge()) {
@@ -2786,7 +3248,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     }
     
     //Part 3
-    switch (receive(_receive_buffer, sizeof(_receive_buffer))) {
+    switch (receive(bytes_received, _receive_buffer, sizeof(_receive_buffer))) {
       case TYPE_ACK:
         show_debug_info(NO_EXTRA_ID_PART3_AVAILABLE);
         return SUCCESS;
@@ -2801,8 +3263,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     }
     
     //Copy the string from the buffer to the struct, without overwriting the second part.
-    string_length = _receive_buffer[0];
-    memcpy(identification_data.extra_identification + extra_identification_string_index, _receive_buffer + 1, string_length);
+    memcpy(identification_data.extra_identification + extra_identification_string_index, _receive_buffer, bytes_received);
   }
   else {
     show_debug_info(NO_EXTRA_ID_AVAILABLE);
@@ -2817,7 +3278,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::read_identification()
     receive_parameters(uint8_t buffer[], uint8_t amount)
   
   Parameters:
-    buffer[] -> array in which to store the received bytes
+    buffer -> array in which to store the received bytes
   
   Returns:
     bool -> whether or not the parameters were received successfully
@@ -2866,7 +3327,7 @@ bool KLineKWP1281Lib::receive_parameters(uint8_t* buffer)
     read_byte(uint8_t &_byte, bool complement)
   
   Parameters:
-    &_byte -> variable into which to store the received byte
+    &_byte     -> variable into which to store the received byte
     complement -> whether or not to send a complement to the received byte
   
   Default parameters:
@@ -2947,7 +3408,7 @@ void KLineKWP1281Lib::send_complement(uint8_t _byte)
     receive(uint8_t buffer[], size_t buffer_size)
   
   Parameters:
-    buffer[] -> array into which to store the received block
+    buffer      -> array into which to store the received block
     buffer_size -> total (maximum) length of the given array
   
   Returns:
@@ -2962,16 +3423,14 @@ void KLineKWP1281Lib::send_complement(uint8_t _byte)
   Notes:
     *Executes the error_function() function if receiving times out.
 */
-KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t buffer_size)
+KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(size_t &bytes_received, uint8_t* buffer, size_t buffer_size)
 {  
-  uint8_t buffer_index = 0; //keep track of how many bytes have been saved in the buffer so far
-  
   //At the beginning of communication, after the modules sends protocol parameters, but before sending its identification strings, it might send those
   //parameters again.
   //In this case, the 0x55 sync byte should not receive an automatic complement (and should not be considered a block length).
   //Instead, two more bytes should be read (protocol description), and a manual complement sent to the second byte.
   //If a byte different than 0x55 is received, or if 0x55 is received but the module already sent its identification strings, it will be considered the block
-  //length and complemented.
+  //length and will be complemented.
   while (true) {
     //Try to receive the length of the block.
     //Do not send an automatic complement in case the event described above takes place.
@@ -2980,7 +3439,7 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
       return ERROR_TIMEOUT;
     }
     
-    //If the event described above takes place, proceed accordingly, after which wait for a byte again, to get the block length of the module's response,
+    //If the event described above takes place, proceed accordingly, after which wait for a byte again, to get the block length of the module's response.
     if (_receive_byte == 0x55 && _may_send_protocol_parameters_again) {
       #ifdef KWP1281_DEBUG_SUPPORTED
         if (_debug_port) {
@@ -3013,18 +3472,11 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
   delay(complementDelay);
   send_complement(_receive_byte);
   
-  //Determine how much data the message will contain (length without the block title, the sequence, and the end byte).
-  uint8_t data_bytes = _receive_byte - 3;
+  //Determine how much data the message contains (length without the block title, the sequence, and the end byte).
+  bytes_received = _receive_byte - 3;
   
-  //If the given buffer has a size of at least one byte, store the message size on the first position.
-  if (buffer_size) {
-    buffer[buffer_index++] = data_bytes;
-  }
-  else {
-    show_debug_info(NULL_ARRAY_SIZE);
-  }
-  
-  if (buffer_size - buffer_index < data_bytes) {
+  //Issue a debug warning if the data will not fit in the buffer.
+  if (buffer_size < bytes_received) {
     show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
   }
   
@@ -3034,25 +3486,22 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
   }
   
   //Try to receive the block's title (message type), or exit if receiving times out.
-  uint8_t command;
-  if (read_byte(command) == ERROR_TIMEOUT) {
+  uint8_t title;
+  if (read_byte(title) == ERROR_TIMEOUT) {
     return ERROR_TIMEOUT;
   }
   
   //If the block contains data bytes, attempt to read them.
-  if (data_bytes) {
+  uint8_t buffer_index = 0;
+  for (uint8_t i = 0; i < bytes_received; i++) {
+    //Try to receive a data byte, or exit if receiving times out.
+    if (read_byte(_receive_byte) == ERROR_TIMEOUT) {
+      return ERROR_TIMEOUT;
+    }
     
-    //Attempt to read each data byte.
-    for (uint8_t i = 0; i < data_bytes; i++) {
-      //Try to receive a data byte, or exit if receiving times out.
-      if (read_byte(_receive_byte) == ERROR_TIMEOUT) {
-        return ERROR_TIMEOUT;
-      }
-      
-      //If there is still space in the given buffer, save the received byte.
-      if (buffer_size - buffer_index) {
-        buffer[buffer_index++] = _receive_byte;
-      }
+    //If there is still space in the given buffer, save the received byte.
+    if (buffer_size - buffer_index) {
+      buffer[buffer_index++] = _receive_byte;
     }
   }
   
@@ -3061,19 +3510,21 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive(uint8_t* buffer, size_t bu
     return ERROR_TIMEOUT;
   }
   
+  //Give the message to the debugging function, if it exists.
   if (_debugFunction) {
-    _debugFunction(1, _sequence, command, buffer + 1, data_bytes);
+    _debugFunction(1, _sequence, title, buffer, bytes_received);
   }
   
+  //Print the received title on the debugging port, if it exists.
   #ifdef KWP1281_DEBUG_SUPPORTED
     if (_debug_port) {
       _debug_port->print(F("Info: received "));
-      show_command_description(command);
+      show_command_description(title);
     }
   #endif
   
   //Return the message type based on the block title byte.
-  switch (command) {
+  switch (title) {
     case KWP_RECEIVE_ID_DATA:
       return TYPE_ID;
     
@@ -3127,7 +3578,7 @@ bool KLineKWP1281Lib::acknowledge()
     send_byte(uint8_t _byte, bool wait_for_complement)
   
   Parameters:
-    _byte -> byte to send
+    _byte               -> byte to send
     wait_for_complement -> whether or not to expect to receive a complement to the sent byte
   
   Returns:
@@ -3179,8 +3630,8 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::send_byte(uint8_t _byte, bool wait
     send(uint8_t command, uint8_t parameters[], uint8_t parameter_count)
   
   Parameters:
-    command -> opcode to send in the block
-    parameters[] -> array of parameters to provide in the block
+    command                 -> opcode to send in the block
+    parameters              -> array of parameters to provide in the block
     uint8_t parameter_count -> how many parameters the given array contains
   
   Returns:
@@ -3492,7 +3943,8 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type)
       }
     }
   #else
-    (void) type;
+    //Mark the parameter as unused.
+    (void)type;
   #endif
 } 
   
@@ -3613,6 +4065,37 @@ void KLineKWP1281Lib::show_command_description(uint8_t command)
       }
     }
   #else
-    (void) command;
+    //Mark the parameter as unused.
+    (void)command;
   #endif
+}
+
+bool KLineKWP1281Lib::is_long_block(uint8_t formula)
+{
+  return (formula == 0x3F || formula == 0x5F || formula == 0x76);
+}
+
+double KLineKWP1281Lib::ToSigned(double MW) {
+  return MW <= 127 ? MW : MW - 256;
+}
+
+double KLineKWP1281Lib::ToSigned(double NW, double MW) {
+  double value = NW * 256 + MW;
+  return value <= 32767 ? value : value - 65536;
+}
+
+double KLineKWP1281Lib::To16Bit(double NW, double MW) {
+  return NW * 256 + MW;
+}
+
+int KLineKWP1281Lib::compare_keyed_structs(const void *a, const void *b)
+{
+  //The struct [b] is coming from PROGMEM.
+  keyed_struct struct_from_PGM;
+  memcpy_P((void*)&struct_from_PGM, b, sizeof(keyed_struct));
+  
+  //Return the difference between the codes of the two structs.
+  int idA = ((struct keyed_struct *)a)->code;
+  int idB = struct_from_PGM.code;
+  return (idA - idB);
 }

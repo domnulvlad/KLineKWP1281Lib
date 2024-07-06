@@ -3,15 +3,17 @@
     05.Single_measurement_test.ino
 
   Description:
-    Demonstrates how to read a single measurement from a module's measuring blocks continuously.
+    Demonstrates how to read a single measurement continuously.
 
   Notes:
     *You can change which block and which measurement to read by modifying the #defines below.
     *This measurement will be read continuously while the sketch is running.
     *It is not necessary to maintain the connection with "diag.update();" in the loop, because any request will have the same effect (update() must
     be used in periods of inactivity).
-    *If you have manually disabled the text table by commenting out the line "#define KWP1281_TEXT_TABLE_SUPPORTED" in "KLineKWP1281Lib.h", the value
-    for some parameters will be displayed as "EN_f25".
+    *This sketch will not fit on an Arduino UNO by default!
+    *To fix this, open the library's /src/KLineKWP1281Lib.h file in a text editor and comment out the line "#define KWP1281_TEXT_TABLE_SUPPORTED"
+    at the top, as explained in the comments.
+    *After manually disabling the text table, the value for some parameters will be displayed as "EN_f25".
     *If you have the text table enabled, you can choose from a few different languages a bit further below in "KLineKWP1281Lib.h". Please only choose
     one option.
 */
@@ -63,9 +65,6 @@
 
   ***If using the first hardware serial port (Serial) (with other sketches), the interface must be disconnected during code upload, and no "Serial.print"s
   should be used.
-  
-  *This sketch will not fit on an Arduino UNO by default! To fix this, open the library's /src/KLineKWP1281Lib.h file in a text editor and comment out the line
-  "#define KWP1281_TEXT_TABLE_SUPPORTED" at the top, as explained in the comments.
 */
 
 //Include the library.
@@ -82,37 +81,10 @@
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex);
 #endif
 
-//Debugging can be enabled in configuration.h in order to print bus traffic on the Serial Monitor.
-#if debug_traffic
-void KWP1281debugFunction(bool type, uint8_t sequence, uint8_t command, uint8_t* data, uint8_t length) {
-  Serial.println();
-  
-  Serial.println(type ? "RECEIVE:" : "SEND:");
-
-  Serial.print("*command: ");
-  if (command < 0x10) Serial.print(0);
-  Serial.println(command, HEX);
-
-  Serial.print("*sequence: ");
-  if (sequence < 0x10) Serial.print(0);
-  Serial.println(sequence, HEX);
-
-  if (length) {
-    Serial.print("*data bytes: ");
-    Serial.println(length);
-
-    Serial.print("*data: ");
-    for (uint16_t i = 0; i < length; i++) { //iterate through the message's contents
-      if (data[i] < 0x10) Serial.print(0);  //print a leading 0 where necessary to display 2-digit HEX
-      Serial.print(data[i], HEX);           //print the byte in HEX
-      Serial.print(' ');
-    }
-    Serial.println();
-  }
-}
-#endif
-
-uint8_t measurements[3 * 4]; //buffer to store the measurements; each measurement takes 3 bytes; one block contains 4 measurements
+//Normally, each measurement takes 3 bytes, and a block can store up to 4 measurements.
+//There are some measurements which take more space.
+//Consider increasing the size of this buffer if you get "Error reading measurements!":
+uint8_t measurements[3 * 4];
 
 void setup() {
   //Initialize the Serial Monitor.
@@ -146,6 +118,7 @@ void showSingleMeasurement(uint8_t block, uint8_t measurement_index) {
       *KLineKWP1281Lib::FAIL    - the requested block does not exist
       *KLineKWP1281Lib::ERROR   - communication error
   */
+  
   uint8_t amount_of_measurements = 0;
   switch (diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements))) {
     case KLineKWP1281Lib::ERROR:
@@ -162,21 +135,27 @@ void showSingleMeasurement(uint8_t block, uint8_t measurement_index) {
       //Will hold the measurement's units
       char units_string[16];
       
-      //Display the selected measurement.
-      
       /*
         The getMeasurementType() function can return:
           *KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
           *KLineKWP1281Lib::UNITS   - the measurement contains human-readable text in the units string
           *KLineKWP1281Lib::VALUE   - "regular" measurement, with a value and units
       */
+      
+      //Display the selected measurement.
       switch (KLineKWP1281Lib::getMeasurementType(measurement_index, amount_of_measurements, measurements, sizeof(measurements))) {
         //Value and units
         case KLineKWP1281Lib::VALUE:
-          Serial.print(KLineKWP1281Lib::getMeasurementValue(measurement_index, amount_of_measurements, measurements, sizeof(measurements)));
+        {
+          //Determine how many decimal places are best suited to this measurement.
+          uint8_t decimals = KLineKWP1281Lib::getMeasurementDecimals(measurement_index, amount_of_measurements, measurements, sizeof(measurements));
+          
+          //Display the calculated value, with the recommended amount of decimals.
+          Serial.print(KLineKWP1281Lib::getMeasurementValue(measurement_index, amount_of_measurements, measurements, sizeof(measurements)), decimals);
           Serial.print(' ');
           Serial.println(KLineKWP1281Lib::getMeasurementUnits(measurement_index, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
-          break;
+        }
+        break;
         
         //Units string containing text
         case KLineKWP1281Lib::UNITS:
