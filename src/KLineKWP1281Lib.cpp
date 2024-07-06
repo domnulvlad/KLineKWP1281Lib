@@ -707,7 +707,7 @@ uint16_t KLineKWP1281Lib::getFaultCode(uint8_t fault_code_index, uint8_t amount_
     bool -> whether or not the fault code is of standard OBD type
   
   Description:
-    Provides a fault description string from a buffer filled by readFaults().
+    Determines whether or not a fault is of the "standard OBD" type.
   
   Notes:
     *If a fault code is of standard OBD type, use getOBDFaultCode() to get a string containing the formatted code.
@@ -731,7 +731,7 @@ bool KLineKWP1281Lib::isOBDFaultCode(uint16_t fault_code)
 /**
   Function:
     getOBDFaultCode(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size, char str[], size_t string_size)
-    getOBDFaultCode(uint16_t fault_code, char* str, size_t string_size)
+    getOBDFaultCode(uint16_t fault_code, char str[], size_t string_size)
   
   Parameters (1):
     fault_code_index       -> index of the fault code whose formatted code needs to be retrieved
@@ -812,7 +812,7 @@ char* KLineKWP1281Lib::getOBDFaultCode(uint16_t fault_code, char* str, size_t st
 /**
   Function:
     getFaultDescription(uint8_t fault_code_index, uint8_t amount_of_fault_codes, uint8_t fault_code_buffer[], size_t fault_code_buffer_size, char str[], size_t string_size)
-    getFaultDescription(uint16_t fault_code, char* str, size_t string_size)
+    getFaultDescription(uint16_t fault_code, char str[], size_t string_size)
   
   Parameters (1):
     fault_code_index       -> index of the fault code whose description needs to be retrieved
@@ -1387,7 +1387,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::adapt(uint8_t channel, uint16_
 
 /**
   Function:
-    basicSetting(uint8_t group, uint8_t basic_setting_buffer[], size_t basic_setting_buffer_size)
+    basicSetting(uint8_t &amount_of_values, uint8_t group, uint8_t basic_setting_buffer[], size_t basic_setting_buffer_size)
   
   Parameters:
     amount_of_values          -> will contain the total number of values read from the basic setting group
@@ -1475,6 +1475,12 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
 */
 uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amount_of_values, uint8_t* basic_setting_buffer, size_t basic_setting_buffer_size)
 {
+  //If an invalid buffer was provided, return 0.
+  if (!basic_setting_buffer || !basic_setting_buffer_size)
+  {
+    return 0;
+  }
+  
   //Check if the array is large enough to contain as many values as "declared" by the value given.
   if (basic_setting_buffer_size < amount_of_values) {
     amount_of_values = basic_setting_buffer_size;
@@ -1510,7 +1516,7 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
     Reads a measurement group.
   
   Notes:
-    *The measurements are stored in the following order: FORMULA, BYTE_A, BYTE_B.
+    *The measurements are stored in the following order: FORMULA, BYTE_A, BYTE_B, but some measurements can contain more data bytes.
     *The getMeasurementValue() function can be used to easily get the calculated values stored in the buffer by readGroup().
     *getMeasurementValue() is a static function so it does not require an instance to be used.
     
@@ -2884,7 +2890,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readROM(uint8_t chunk_size, ui
     outputTests(uint16_t &current_output_test)
   
   Parameters:
-    &current_output_test -> will contain the currently running output test ID
+    current_output_test -> will contain the currently running output test ID
   
   Returns:
     executionStatus -> whether or not the operation executed successfully
@@ -2930,7 +2936,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::outputTests(uint16_t &current_
 
 /**
   Function:
-    getOutputTestDescription(uint16_t output_test, char[] str, size_t string_size)
+    getOutputTestDescription(uint16_t output_test, char str[], size_t string_size)
   
   Parameters:
     output_test -> output test ID, given by outputTests()
