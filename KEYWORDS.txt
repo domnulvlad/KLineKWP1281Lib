@@ -62,6 +62,7 @@ getMeasurementDataLength	KEYWORD2
 getMeasurementType	KEYWORD2
 getMeasurementValue	KEYWORD2
 getMeasurementUnits	KEYWORD2
+getMeasurementText	KEYWORD2
 getMeasurementDecimals	KEYWORD2
 
 readROM	KEYWORD2

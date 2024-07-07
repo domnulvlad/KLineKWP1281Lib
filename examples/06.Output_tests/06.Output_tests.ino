@@ -117,11 +117,11 @@ void performOutputTests() {
       *KLineKWP1281Lib::ERROR   - communication error
   */
   
-  //Run the first output test and store its execution status.
-  KLineKWP1281Lib::executionStatus status = diag.outputTests(current_output_test);
+  //Run the first output test and store the return value.
+  KLineKWP1281Lib::executionStatus outputTests_status = diag.outputTests(current_output_test);
   
   //Continue running output tests until something other than SUCCESS is returned.
-  while (status == KLineKWP1281Lib::SUCCESS)
+  while (outputTests_status == KLineKWP1281Lib::SUCCESS)
   {
     //Declare a character array and use it to store the description string.
     char description_string[32];
@@ -154,13 +154,13 @@ void performOutputTests() {
     }
     
     //Run the next output test.
-    status = diag.outputTests(current_output_test);
+    outputTests_status = diag.outputTests(current_output_test);
   }
   
   //At this point, the loop above was stopped because either FAIL or ERROR was returned.
   
   //If FAIL was returned, the output test sequence is complete.
-  if (status == KLineKWP1281Lib::FAIL)
+  if (outputTests_status == KLineKWP1281Lib::FAIL)
   {
     Serial.println("End of output tests");
   }

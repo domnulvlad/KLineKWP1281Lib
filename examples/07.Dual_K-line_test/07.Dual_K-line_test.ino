@@ -157,6 +157,9 @@ void kline2_task(void *arg) {
 }
 
 void getSingleMeasurement(uint8_t block, uint8_t measurement_index, KLineKWP1281Lib &diag, QueueHandle_t &measurement_queue, uint8_t *measurement_buffer, size_t measurement_buffer_size) {
+  //This will contain the amount of measurements in the current block, after calling the readGroup() function.
+  uint8_t amount_of_measurements = 0;
+  
   /*
     The readGroup() function can return:
        KLineKWP1281Lib::SUCCESS - received measurements
@@ -164,88 +167,98 @@ void getSingleMeasurement(uint8_t block, uint8_t measurement_index, KLineKWP1281
        KLineKWP1281Lib::ERROR   - communication error
   */
   
-  uint8_t amount_of_measurements = 0;
-  switch (diag.readGroup(amount_of_measurements, block, measurement_buffer, measurement_buffer_size)) {
+  //Read the requested group and store the return value.
+  KLineKWP1281Lib::executionStatus readGroup_status = diag.readGroup(amount_of_measurements, block, measurement_buffer, measurement_buffer_size);
+  
+  switch (readGroup_status) {
     case KLineKWP1281Lib::ERROR:
       Serial.println("Error reading measurements!");
-      break;
+      return;
 
     case KLineKWP1281Lib::FAIL:
       Serial.printf("Block %d does not exist!\n", block);
-      break;
+      return;
 
+    //Execute the code after the switch().
     case KLineKWP1281Lib::SUCCESS:
-      {
-        //This structure will contain the received measurement.
-        kline_measurement_structure measurement_structure;
-        
-        /*
-          *Most measurements only need the "formula" (type), "NWb" (byte A) and "MWb" (byte B).
-          *You can call getMeasurementValue() with these 3 parameters, instead of all (index, amount, buffer, buffer size).
-          *To determine the type of a measurement with the getMeasurementType() function, only the formula is needed.
-          
-          *There are a few measurement types which may contain more than 2 data bytes (for example, if the module sends long text or a field of values).
-          *In this case, the data buffer and its length can be retrieved with getMeasurementData() and getMeasurementDataLength().
-          
-          *The function getMeasurementData() returns a pointer into the measurement buffer, so its contents must be copied to avoid loss!
-          
-          *The function getMeasurementUnits() can either be called by giving all parameters (index, amount, buffer, buffer size), or by giving the measurement
-          data buffer and its length.
-          *It can NOT be called using only formula, NWb and MWb.
-          
-          *You can also call getMeasurementValue() with the data buffer and its length.
-        */
-        
-        
-        //Retrieve the 3 bytes into the structure.
-        measurement_structure.formula = KLineKWP1281Lib::getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-        measurement_structure.NWb = KLineKWP1281Lib::getNWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-        measurement_structure.MWb = KLineKWP1281Lib::getMWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-        
-        //Retrieve the data buffer and its length, because some measurements may need it.
-        uint8_t measurement_data_length = KLineKWP1281Lib::getMeasurementDataLength(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-        uint8_t *measurement_data = KLineKWP1281Lib::getMeasurementData(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-        
-        //Copy the data buffer and its length into the structure.
-        measurement_structure.measurement_data_length = measurement_data_length;
-        memcpy(measurement_structure.measurement_data, measurement_data, measurement_data_length);
-        
-        //Put the structure on the specified queue; don't wait for the queue to free up if it is full.
-        xQueueSend(measurement_queue, &measurement_structure, 0);
-      }
       break;
   }
+  
+  //This structure will contain the received measurement.
+  kline_measurement_structure measurement_structure;
+  
+  /*
+    *Most measurements only need the "formula" (type), "NWb" (byte A) and "MWb" (byte B).
+    *To determine the type of a measurement with the getMeasurementType() function, only the formula is needed.
+    
+    *For measurements of type VALUE, you need to get the value and units.
+    *You can call getMeasurementValue() with those 3 parameters mentioned above, instead of all (index, amount, buffer, buffer size).
+    *The same applies to getMeasurementUnits().
+    
+    *There are a few measurements which may contain more than 2 data bytes (for example, if the module sends long text or a field of values).
+    *These measurements will always be of the TEXT type, even if most of them still only use the 2 data bytes.
+    
+    *So the getMeasurementText() function can either be called with all parameters, or with the data buffer and its length.
+    *In this case, the data buffer and its length can be retrieved with getMeasurementData() and getMeasurementDataLength().    
+    *The function getMeasurementData() returns a pointer into the measurement buffer, so its contents must be copied to avoid loss!
+    
+    *You cannot call getMeasurementText() with only those 3 bytes!
+  */
+  
+  
+  //Retrieve the 3 bytes into the structure.
+  measurement_structure.formula = KLineKWP1281Lib::getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  measurement_structure.NWb = KLineKWP1281Lib::getNWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  measurement_structure.MWb = KLineKWP1281Lib::getMWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  
+  //Retrieve the data buffer and its length, because some measurements may need it.
+  uint8_t measurement_data_length = KLineKWP1281Lib::getMeasurementDataLength(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  uint8_t *measurement_data = KLineKWP1281Lib::getMeasurementData(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  
+  //Copy the data buffer and its length into the structure.
+  measurement_structure.measurement_data_length = measurement_data_length;
+  memcpy(measurement_structure.measurement_data, measurement_data, measurement_data_length);
+  
+  //Put the structure on the specified queue; don't wait for the queue to free up if it is full.
+  xQueueSend(measurement_queue, &measurement_structure, 0);
 }
 
 void displayMeasurement(kline_measurement_structure &measurement_structure) {
-  //Will hold the measurement's units
-  char units_string[16];
- 
   /*
     The getMeasurementType() function can return:
-      KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
-      KLineKWP1281Lib::UNITS   - the measurement contains human-readable text in the units string
-      KLineKWP1281Lib::VALUE   - "regular" measurement, with a value and units
+      *KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
+      *KLineKWP1281Lib::VALUE   - regular measurement, with a value and units
+      *KLineKWP1281Lib::TEXT    - text measurement
   */
   
+  //Get the measurement's type and check the return value.
   switch (KLineKWP1281Lib::getMeasurementType(measurement_structure.formula)) {
-    //Value and units
+    //"Value and units" type
     case KLineKWP1281Lib::VALUE:
     {
+      //This will hold the measurement's units.
+      char units_string[16];
+      
       //Determine how many decimal places are best suited to this measurement.
       uint8_t decimals = KLineKWP1281Lib::getMeasurementDecimals(measurement_structure.formula);
       
       //Display the calculated value, with the recommended amount of decimals.
       Serial.print(KLineKWP1281Lib::getMeasurementValue(measurement_structure.formula, measurement_structure.NWb, measurement_structure.MWb), decimals);
       Serial.print(' ');
-      Serial.print(KLineKWP1281Lib::getMeasurementUnits(measurement_structure.formula, measurement_structure.measurement_data, measurement_structure.measurement_data_length, units_string, sizeof(units_string)));
+      Serial.print(KLineKWP1281Lib::getMeasurementUnits(measurement_structure.formula, measurement_structure.NWb, measurement_structure.MWb, units_string, sizeof(units_string)));
     }
     break;
 
-    //Units string containing text
-    case KLineKWP1281Lib::UNITS:
-      Serial.print(KLineKWP1281Lib::getMeasurementUnits(measurement_structure.formula, measurement_structure.measurement_data, measurement_structure.measurement_data_length, units_string, sizeof(units_string)));
-      break;
+    //"Text" type
+    case KLineKWP1281Lib::TEXT:
+    {
+      //This will hold the measurement's text.
+      char text_string[16];
+      
+      //Display the text.
+      Serial.print(KLineKWP1281Lib::getMeasurementText(measurement_structure.formula, measurement_structure.measurement_data, measurement_structure.measurement_data_length, text_string, sizeof(text_string)));
+    }
+    break;
 
     //Invalid measurement index
     case KLineKWP1281Lib::UNKNOWN:

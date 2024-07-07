@@ -517,69 +517,8 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::recode(uint16_t coding, uint32
     *The DTCs are stored in the following order: DTC_H, DTC_L, DTC_ELABORATION.
     *The functions getFaultCode() and getFaultElaborationCode() can be used to easily get the fault+elaboration codes stored in the buffer by readFaults().
     *getFaultCode() and getFaultElaborationCode() are static functions so they do not require an instance to be used.
-    
-    *A possible implementation for displaying all fault+elaboration codes, after the buffer is filled by readFaults(), would be:
-      ||//Navigate the list of fault codes.
-      ||for (uint8_t i = 0; i < amount_of_fault_codes; i++) {
-      ||  //Get the "i"-th fault code and elaboration code from the buffer.
-      ||  //The "buffer" parameter represents the same array that was given to readFaults().
-      ||  uint16_t DTC = KLineKWP1281Lib::getFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer));
-      ||  uint8_t DTC_elaboration = KLineKWP1281Lib::getFaultElaborationCode(i, amount_of_fault_codes, buffer, sizeof(buffer));
-      ||  
-      ||  //Declare a character array and use it to store the fault code.
-      ||  char DTC_string[8];
-      ||  sprintf(DTC_string, "%05d", DTC); //pad with zeroes to reach 5 characters
-      ||
-      ||  //Declare a character array and use it to store the elaboration code.
-      ||  char DTC_elaboration_string[8];
-      ||  sprintf(DTC_elaboration_string, "%02d", DTC_elaboration); //pad with zeroes to reach 2 characters
-      ||  
-      ||  //Print the fault and elaboration code.
-      ||  Serial.print(DTC_string);
-      ||  Serial.print(" - ");
-      ||  Serial.println(DTC_elaboration_string);
-      ||
-      ||  //Declare a character array and use it to store the elaboration string.
-      ||  char elaboration_string[32];
-      ||  
-      ||  //Declare a bool that indicates whether or not the fault is intermittent.
-      ||  bool is_intermittent;
-      ||  
-      ||  //Get the elaboration string.
-      ||  KLineKWP1281Lib::getFaultElaboration(is_intermittent, i, amount_of_fault_codes, buffer, sizeof(buffer), elaboration_string, sizeof(elaboration_string));
-      ||  
-      ||  //Print the elaboration.
-      ||  Serial.print(elaboration_string);
-      ||
-      ||  if (is_intermittent) {
-      ||    Serial.print(" - Intermittent");
-      ||  }
-      ||  
-      ||  Serial.println();
-      ||}
-    
-    *Some fault codes may be sent in a "standard OBD" format. This is how they should be handled:
-      ||if (KLineKWP1281Lib::isOBDFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer)))
-      ||{
-      ||  //Declare a character array and use it to store the formatted fault code string.
-      ||  char DTC_string[6];
-      ||
-      ||  //Store the formatted fault code in the string.
-      ||  KLineKWP1281Lib::getOBDFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer), DTC_string, sizeof(DTC_string));
-      ||
-      ||  //Print the fault code.
-      ||  Serial.println(DTC_string);
-      ||}
-    
-    *It is possible to use the getFaultCode() function to avoid giving so many parameters to all other functions:
-      ||//Get the fault code.
-      ||uint16_t fault_code = KLineKWP1281Lib::getFaultCode(i, amount_of_fault_codes, buffer, sizeof(buffer));
-      ||
-      ||//Only give the fault code to the functions
-      ||if (KLineKWP1281Lib::isOBDFaultCode(fault_code))
-      ||{
-      ||  ...
-      ||}
+    *Some fault codes may be sent in a "standard OBD" format. Determine this using the isOBDFaultCode() function.
+    *If the fault is indeed OBD, you can get a string containing the correct representation with getOBDFaultCode().
 */
 KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readFaults(uint8_t &amount_of_fault_codes, uint8_t* fault_code_buffer, size_t fault_code_buffer_size)
 {
@@ -1519,35 +1458,6 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
     *The measurements are stored in the following order: FORMULA, BYTE_A, BYTE_B, but some measurements can contain more data bytes.
     *The getMeasurementValue() function can be used to easily get the calculated values stored in the buffer by readGroup().
     *getMeasurementValue() is a static function so it does not require an instance to be used.
-    
-    *A possible implementation for displaying all measurements from a group would be:
-      ||//Create a character array which will hold the measurement's units
-      ||char units_string[16];
-      ||
-      ||//Navigate the list of measurements.
-      ||for (uint8_t i = 0; i < amount_of_measurements; i++) {
-      ||  //Print the measurement index.
-      ||  Serial.print(i);
-      ||  Serial.print(": ");
-      ||  
-      ||  //Print the "i"-th measurement differently based on its type.
-      ||  //The "buffer" parameter represents the same array that was given to readGroup().
-      ||  switch (KLineKWP1281Lib::getMeasurementType(i, amount_of_measurements, buffer, sizeof(buffer))) {
-      ||    case KLineKWP1281Lib::VALUE: //Value and units
-      ||      Serial.print(KLineKWP1281Lib::getMeasurementValue(i, amount_of_measurements, buffer, sizeof(buffer)));
-      ||      Serial.print(' ');
-      ||      Serial.println(KLineKWP1281Lib::getMeasurementUnits(i, amount_of_measurements, buffer, sizeof(buffer), units_string, sizeof(units_string)));
-      ||      break;
-      ||    
-      ||    case KLineKWP1281Lib::UNITS: //Units string containing text
-      ||      Serial.println(KLineKWP1281Lib::getMeasurementUnits(i, amount_of_measurements, buffer, sizeof(buffer), units_string, sizeof(units_string)));
-      ||      break;
-      ||    
-      ||    case KLineKWP1281Lib::UNKNOWN: //Invalid measurement index
-      ||      Serial.println("N/A");
-      ||      break;
-      ||  }
-      ||}
 */
 KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size)
 {
@@ -1954,17 +1864,17 @@ uint8_t KLineKWP1281Lib::getMeasurementDataLength(uint8_t measurement_index, uin
   Returns:
     measurementType ->
       UNKNOWN - requested measurement outside range
-      VALUE   - the value is significant (measurement has value+units)
-      UNITS   - the units are significant (human-readable text is contained in the units string)
+      VALUE   - get value with getMeasurementValue() and units with getMeasurementUnits()
+      TEXT    - get text with getMeasurementText() and, sometimes, original value with getMeasurementValue()
   
   Description:
-    Determines whether the value or the units string is significant for a measurement from a buffer filled by readGroup().
+    Determines the type of a measurement from a buffer filled by readGroup().
   
   Notes:
     *If an invalid measurement_index is specified, the returned type is UNKNOWN.
-    *Even if the measurement is of type UNITS, its value might contain the "origin" of the units string, like a code or 16-bit value so it can be used without
-    necessarily checking the units string.
-    *For example, for a clock measurement, the units string will contain "hh:mm", but the value will also be hh.mm (hours before decimal, minutes after).
+    *Even if the measurement is of type TEXT, its value might contain the "origin" of the string, like a code or 16-bit value so it can be used without
+    necessarily checking the text itself.
+    *For example, for a clock measurement, the text string will contain "hh:mm", but the value will also be hh.mm (hours before decimal, minutes after).
     *It is a static function, so it does not require an instance to be used.
 */
 KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size)
@@ -1978,27 +1888,29 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t mea
 
 KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t formula)
 {
-  //Only a few measurement formulas are of the "UNITS" type.
+  //Only a few measurement formulas are of the "TEXT" type.
   switch (formula) {
     case 0x00:
       return UNKNOWN;
-      
-    case 0x0A: //Warm/Cold
-    case 0x10: //Switch positions
-    case 0x11: //2 ASCII letters
-    case 0x1D: //Map1/Map2
-    case 0x25: //Text from table
-    case 0x2C: //Time
+    
+    //Long
     case 0x3F: //ASCII long text
     case 0x5F: //ASCII long text
-    case 0x6B: //Hex bytes
     case 0x76: //Hex bytes
-    case 0x7B: //Text from table
-    case 0x7F: //Date
+    //Regular
+    case 0x0A: //Warm/Cold
+    case 0x10: //Switch positions
     case 0x88: //Switch positions
+    case 0x11: //2 ASCII letters
     case 0x8E: //2 ASCII letters
+    case 0x1D: //Map1/Map2
+    case 0x25: //Text from table
+    case 0x7B: //Text from table
+    case 0x2C: //Time
+    case 0x6B: //Hex bytes
+    case 0x7F: //Date
     case 0xA1: //Binary bytes
-      return UNITS;
+      return TEXT;
     
     default:
       return VALUE;
@@ -2041,13 +1953,7 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t a
 {
   //Determine the formula.
   uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-  
-  //If the measurement is "long", the value cannot be calculated; return nan.
-  if (is_long_block(formula))
-  {
-    return 0.0 / 0.0;
-  }
-  
+    
   //Determine NWb and MWb.
   uint8_t NWb = getNWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   uint8_t MWb = getMWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
@@ -2060,12 +1966,6 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t *measuremen
 {
   //If an invalid buffer was provided, return nan.
   if (!measurement_data || !measurement_data_length)
-  {
-    return 0.0 / 0.0;
-  }
-  
-  //If the measurement is "long", the value cannot be calculated; return nan.
-  if (is_long_block(formula))
   {
     return 0.0 / 0.0;
   }
@@ -2283,6 +2183,7 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
   Function:
     getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size, char str[], size_t string_size)
     getMeasurementUnits(uint8_t formula, uint8_t measurement_data[], uint8_t measurement_data_length, char str[], size_t string_size)
+    getMeasurementUnits(uint8_t formula, uint8_t NWb, uint8_t MWb, char str[], size_t string_size)
   
   Parameters (1):
     measurement_index       -> index of the measurement whose units must be determined (0-4)
@@ -2299,11 +2200,18 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
     str                     -> string (character array) into which to copy the units
     string_size             -> total size of the given array (provided with the sizeof() operator)
   
+  Parameters (3):
+    formula     -> byte returned by getFormula()
+    NWb         -> byte returned by getNWb()
+    MWb         -> byte returned by getMWb()
+    str         -> string (character array) into which to copy the units
+    string_size -> total size of the given array (provided with the sizeof() operator)
+  
   Returns:
     char* -> the same character array provided (str)
   
   Description:
-    Provides a string containing the proper units for a measurement from a buffer filled by readGroup().
+    Provides a string containing the proper units for a measurement of type VALUE.
   
   Notes:
     *It is a static function, so it does not require an instance to be used.
@@ -2313,15 +2221,395 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
   //Determine the formula.
   uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   
+  //Determine NWb and MWb.
+  uint8_t NWb = getNWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  uint8_t MWb = getMWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  
+  //Use the other function.
+  return getMeasurementUnits(formula, NWb, MWb, str, string_size);
+}
+
+char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size)
+{
+  //If an invalid buffer was provided, return an invalid string.
+  if (!measurement_data || !measurement_data_length)
+  {
+    return nullptr;
+  }
+  
+  //The data length must be 2.
+  if (measurement_data_length != 2)
+  {
+    return nullptr;
+  }
+  
+  //Determine NWb and MWb.
+  uint8_t NWb = measurement_data[0];
+  uint8_t MWb = measurement_data[1];
+  
+  //Use the other function.
+  return getMeasurementUnits(formula, NWb, MWb, str, string_size);
+}
+
+char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t NWb, uint8_t MWb, char* str, size_t string_size)
+{
+  //If an invalid buffer was provided, return an invalid string.
+  if (!str || !string_size)
+  {
+    return nullptr;
+  }
+  
+  //Cannot retrieve units for measurements of type TEXT or UNKNOWN.
+  if (getMeasurementType(formula) != VALUE)
+  {
+    return nullptr;
+  }
+  
+  //This will point to one of the strings stored in PROGMEM from "units.h", which will be copied into the given string.
+  const char* unit_pointer = nullptr;
+  switch (formula) {
+    case 0x01:
+    case 0x74:
+    case 0x80:
+    case 0x8B:
+      unit_pointer = KWP_units_RPM;
+      break;
+    
+    case 0x02:
+    case 0x14:
+    case 0x17:
+    case 0x21:
+    case 0x77:
+    case 0x81:
+    case 0x93:
+    case 0xA4:
+    case 0xA8:
+      unit_pointer = KWP_units_Percentage;
+      break;
+    
+    case 0x03:
+    case 0x09:
+    case 0x1E:
+    case 0x43:
+    case 0x51:
+    case 0x5B:
+    case 0x70:
+    case 0x78:
+    case 0x84:
+    case 0x8F:
+    case 0x9A:
+    case 0x9B:
+    case 0xA2:
+      unit_pointer = KWP_units_Angle;
+      break;
+    
+    case 0x04:
+      unit_pointer = (MWb < 127) ? KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
+      break;
+    
+    case 0x05:
+    case 0x1A:
+    case 0x61:
+    case 0x75:
+    case 0x8C:
+    case 0x95:
+    case 0x9F:
+      unit_pointer = KWP_units_Temperature;
+      break;
+    
+    case 0x06:
+    case 0x15:
+    case 0x2B:
+    case 0x42:
+    case 0x48:
+    case 0x4D:
+    case 0x67:
+    case 0x85:
+    case 0x8A:
+      unit_pointer = KWP_units_Voltage;
+      break;
+    
+    case 0x07:
+    case 0x6A:
+    case 0x86:
+    case 0x9E:
+      unit_pointer = KWP_units_Speed;
+      break;
+    
+    case 0x0C:
+    case 0x40:
+    case 0x49:
+      unit_pointer = KWP_units_Resistance;
+      break;
+    
+    case 0x0D:
+    case 0x41:
+    case 0x66:
+      unit_pointer = KWP_units_Distance_m;
+      break;
+    
+    case 0x0E:
+    case 0x45:
+    case 0x53:
+    case 0x64:
+    case 0xAF:
+      unit_pointer = KWP_units_Pressure;
+      break;
+    
+    case 0x0F:
+    case 0x16:
+    case 0x2F:
+    case 0x89:
+      unit_pointer = KWP_units_Time_m;
+      break;
+    
+    case 0x12:
+    case 0x32:
+    case 0x60:
+      unit_pointer = KWP_units_Pressure_m;
+      break;
+    
+    case 0x13:
+      unit_pointer = KWP_units_Volume;
+      break;
+    
+    case 0x18:
+    case 0x28:
+    case 0x56:
+    case 0x82:
+      unit_pointer = KWP_units_Current;
+      break;
+    
+    case 0x19:
+    case 0x35:
+    case 0x96:
+      unit_pointer = KWP_units_Mass_Flow;
+      break;
+    
+    case 0x1B:
+      unit_pointer = (MWb < 128) ? KWP_units_Ignition_ATDC : KWP_units_Ignition_BTDC;
+      break;
+    
+    case 0x22:
+      unit_pointer = KWP_units_Correction;
+      break;
+    
+    case 0x23:
+    case 0x90:
+      unit_pointer = KWP_units_Consumption_h;
+      break;
+    
+    case 0x24:
+    case 0x5C:
+    case 0x6F:
+      unit_pointer = KWP_units_Distance_k;
+      break;
+    
+    case 0x26:
+    case 0x2E:
+    case 0x97:
+      unit_pointer = KWP_units_Segment_Correction;
+      break;
+    
+    case 0x27:
+    case 0x31:
+    case 0x33:
+    case 0x98:
+    case 0x99:
+      unit_pointer = KWP_units_Mass_Per_Stroke_m;
+      break;
+    
+    case 0x29:
+      unit_pointer = KWP_units_Capacity;
+      break;
+    
+    case 0x2A:
+      unit_pointer = KWP_units_Power_k;
+      break;
+    
+    case 0x2D:
+    case 0x91:
+      unit_pointer = KWP_units_Consumption_100km;
+      break;
+    
+    case 0x34:
+    case 0x5D:
+    case 0x5E:
+    case 0xB1:
+      unit_pointer = KWP_units_Torque;
+      break;
+    
+    case 0x37:
+    case 0x3C:
+    case 0x3E:
+      unit_pointer = KWP_units_Time;
+      break;
+    
+    case 0x3A:
+    case 0x4E:
+      unit_pointer = KWP_units_Misfires;
+      break;
+    
+    case 0x44:
+    case 0x55:
+    case 0x57:
+    case 0xA6:
+    case 0xB2:
+      unit_pointer = KWP_units_Turn_Rate;
+      break;
+    
+    case 0x46:
+    case 0x52:
+    case 0x54:
+      unit_pointer = KWP_units_Acceleration;
+      break;
+    
+    case 0x47:
+    case 0x9C:
+    case 0x9D:
+      unit_pointer = KWP_units_Distance_c;
+      break;
+    
+    case 0x4A:
+      unit_pointer = KWP_units_Time_mo;
+      break;
+    
+    case 0x4C:
+    case 0x50:
+    case 0x58:
+      unit_pointer = KWP_units_Resistance_k;
+      break;
+    
+    case 0x59:
+    case 0xA3:
+      unit_pointer = KWP_units_Time_h;
+      break;
+    
+    case 0x5A:
+      unit_pointer = KWP_units_Mass_k;
+      break;
+    
+    case 0x62:
+      unit_pointer = KWP_units_Impulses;
+      break;
+    
+    case 0x65:
+      unit_pointer = KWP_units_Fuel_Level_Factor;
+      break;
+    
+    case 0x68:
+      unit_pointer = KWP_units_Volume_m;
+      break;
+    
+    case 0x69:
+    case 0x72:
+      unit_pointer = KWP_units_Distance;
+      break;
+    
+    case 0x73:
+      unit_pointer = KWP_units_Power;
+      break;
+    
+    case 0x7C:
+    case 0xA5:
+      unit_pointer = KWP_units_Current_m;
+      break;
+    
+    case 0x7D:
+      unit_pointer = KWP_units_Attenuation;
+      break;
+    
+    case 0x83:
+      unit_pointer = ((float(NWb) * float(MWb) / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
+      break;
+    
+    case 0xA7:
+      unit_pointer = KWP_units_Resistance_m;
+      break;
+    
+    case 0xA9:
+      unit_pointer = KWP_units_Voltage_m;
+      break;
+    
+    case 0xAA:
+    case 0xAB:
+      unit_pointer = KWP_units_Mass;
+      break;
+    
+    case 0xAC:
+      unit_pointer = KWP_units_Mass_Flow_km;
+      break;
+    
+    case 0xAD:
+    case 0xB5:
+      unit_pointer = KWP_units_Mass_Flow_m;
+      break;
+    
+    case 0xAE:
+      unit_pointer = KWP_units_Consumption_1000km;
+      break;
+    
+    case 0xB0:
+      unit_pointer = KWP_units_Parts_Per_Million;
+      break;
+    
+    case 0xB4:
+      unit_pointer = KWP_units_Mass_Per_Stroke_k;
+      break;
+    
+    default:
+      str[0] = '\0';
+      return str;
+  }
+  
+  strncpy_P(str, unit_pointer, string_size);
+  str[string_size - 1] = '\0';
+  return str;
+}
+
+/**
+  Function:
+    getMeasurementText(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size, char str[], size_t string_size)
+    getMeasurementText(uint8_t formula, uint8_t measurement_data[], uint8_t measurement_data_length, char str[], size_t string_size)
+  
+  Parameters (1):
+    measurement_index       -> index of the measurement whose text must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+    str                     -> string (character array) into which to copy the text
+    string_size             -> total size of the given array (provided with the sizeof() operator)
+  
+  Parameters (2):
+    formula                 -> byte returned by getFormula()
+    measurement_data        -> buffer returned by getMeasurementData()
+    measurement_data_length -> byte returned by getMeasurementDataLength()
+    str                     -> string (character array) into which to copy the text
+    string_size             -> total size of the given array (provided with the sizeof() operator)
+  
+  Returns:
+    char* -> the same character array provided (str)
+  
+  Description:
+    Provides a string containing the text for a measurement of type TEXT.
+  
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+char* KLineKWP1281Lib::getMeasurementText(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size)
+{
+  //Determine the formula.
+  uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  
   //Determine the measurement data and length.
   uint8_t *measurement_data = getMeasurementData(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   uint8_t measurement_data_length = getMeasurementDataLength(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
   
   //Use the other function.
-  return getMeasurementUnits(formula, measurement_data, measurement_data_length, str, string_size);
+  return getMeasurementText(formula, measurement_data, measurement_data_length, str, string_size);
 }
 
-char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size)
+char* KLineKWP1281Lib::getMeasurementText(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size)
 {
   //If an invalid buffer was provided, return an invalid string.
   if (!measurement_data || !measurement_data_length || !str || !string_size)
@@ -2329,7 +2617,13 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement
     return nullptr;
   }
   
-  //Clear the string, so it's returned empty if the units cannot be determined.
+  //Cannot retrieve text for measurements of type VALUE or UNKNOWN.
+  if (getMeasurementType(formula) != TEXT)
+  {
+    return nullptr;
+  }
+  
+  //Clear the string, so it's returned empty if the text cannot be determined.
   str[0] = '\0';
   
   //Handle formulas 3F, 5F, 76.
@@ -2372,116 +2666,22 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement
   else
   {
     //Get the two significant data bytes.
-    uint8_t byte_a = measurement_data[0], byte_b = measurement_data[1];
+    uint8_t NWb = measurement_data[0], MWb = measurement_data[1];
     
     //This will point to one of the strings stored in PROGMEM from "units.h", which will be copied into the given string.
     const char* unit_pointer = nullptr;
-    
     switch (formula) {
-      case 0x01:
-      case 0x74:
-      case 0x80:
-      case 0x8B:
-        unit_pointer = KWP_units_RPM;
-        break;
-      
-      case 0x02:
-      case 0x14:
-      case 0x17:
-      case 0x21:
-      case 0x77:
-      case 0x81:
-      case 0x93:
-      case 0xA4:
-      case 0xA8:
-        unit_pointer = KWP_units_Percentage;
-        break;
-      
-      case 0x03:
-      case 0x09:
-      case 0x1E:
-      case 0x43:
-      case 0x51:
-      case 0x5B:
-      case 0x70:
-      case 0x78:
-      case 0x84:
-      case 0x8F:
-      case 0x9A:
-      case 0x9B:
-      case 0xA2:
-        unit_pointer = KWP_units_Angle;
-        break;
-      
-      case 0x04:
-        unit_pointer = (byte_b < 127) ? KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
-        break;
-      
-      case 0x05:
-      case 0x1A:
-      case 0x61:
-      case 0x75:
-      case 0x8C:
-      case 0x95:
-      case 0x9F:
-        unit_pointer = KWP_units_Temperature;
-        break;
-      
-      case 0x06:
-      case 0x15:
-      case 0x2B:
-      case 0x42:
-      case 0x48:
-      case 0x4D:
-      case 0x67:
-      case 0x85:
-      case 0x8A:
-        unit_pointer = KWP_units_Voltage;
-        break;
-      
-      case 0x07:
-      case 0x6A:
-      case 0x86:
-      case 0x9E:
-        unit_pointer = KWP_units_Speed;
-        break;
-      
+      //Warm/Cold
       case 0x0A:
-        unit_pointer = byte_b ? KWP_units_Warm : KWP_units_Cold;
+        unit_pointer = MWb ? KWP_units_Warm : KWP_units_Cold;
         break;
       
-      case 0x0C:
-      case 0x40:
-      case 0x49:
-        unit_pointer = KWP_units_Resistance;
-        break;
-      
-      case 0x0D:
-      case 0x41:
-      case 0x66:
-        unit_pointer = KWP_units_Distance_m;
-        break;
-      
-      case 0x0E:
-      case 0x45:
-      case 0x53:
-      case 0x64:
-      case 0xAF:
-        unit_pointer = KWP_units_Pressure;
-        break;
-      
-      case 0x0F:
-      case 0x16:
-      case 0x2F:
-      case 0x89:
-        unit_pointer = KWP_units_Time_m;
-        break;
-      
+      //Switch positions
       case 0x10:
       case 0x88:
         for (uint8_t i = 0; i < ((string_size < 8) ? string_size : 8); i++) {
-          if (byte_a & (1 << (7 - i))) {
-            if (byte_b & (1 << (7 - i))) {
+          if (NWb & (1 << (7 - i))) {
+            if (MWb & (1 << (7 - i))) {
               str[i] = '1';
             }
             else {
@@ -2501,14 +2701,15 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement
         }
         return str;
       
+      //2 ASCII letters
       case 0x11:
       case 0x8E:
         if (string_size > 0) {
-          str[0] = byte_a;
+          str[0] = NWb;
         }
         
         if (string_size > 1) {
-          str[1] = byte_b;
+          str[1] = MWb;
         }
         
         if (string_size > 2) {
@@ -2519,217 +2720,9 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement
         }
         return str;
       
-      case 0x2C:
-        snprintf(str, string_size, "%02d:%02d", byte_a, byte_b);
-        str[string_size - 1] = '\0';
-        return str;
-      
-      case 0x12:
-      case 0x32:
-      case 0x60:
-        unit_pointer = KWP_units_Pressure_m;
-        break;
-      
-      case 0x13:
-        unit_pointer = KWP_units_Volume;
-        break;
-      
-      case 0x18:
-      case 0x28:
-      case 0x56:
-      case 0x82:
-        unit_pointer = KWP_units_Current;
-        break;
-      
-      case 0x19:
-      case 0x35:
-      case 0x96:
-        unit_pointer = KWP_units_Mass_Flow;
-        break;
-      
-      case 0x1B:
-        unit_pointer = (byte_b < 128) ? KWP_units_Ignition_ATDC : KWP_units_Ignition_BTDC;
-        break;
-      
+      //Map1/Map2
       case 0x1D:
-        unit_pointer =  (byte_b < byte_a) ? KWP_units_Map1 : KWP_units_Map2;
-        break;
-      
-      case 0x22:
-        unit_pointer = KWP_units_Correction;
-        break;
-      
-      case 0x23:
-      case 0x90:
-        unit_pointer = KWP_units_Consumption_h;
-        break;
-      
-      case 0x24:
-      case 0x5C:
-      case 0x6F:
-        unit_pointer = KWP_units_Distance_k;
-        break;
-      
-      case 0x26:
-      case 0x2E:
-      case 0x97:
-        unit_pointer = KWP_units_Segment_Correction;
-        break;
-      
-      case 0x27:
-      case 0x31:
-      case 0x33:
-      case 0x98:
-      case 0x99:
-        unit_pointer = KWP_units_Mass_Per_Stroke_m;
-        break;
-      
-      case 0x29:
-        unit_pointer = KWP_units_Capacity;
-        break;
-      
-      case 0x2A:
-        unit_pointer = KWP_units_Power_k;
-        break;
-      
-      case 0x2D:
-      case 0x91:
-        unit_pointer = KWP_units_Consumption_100km;
-        break;
-      
-      case 0x34:
-      case 0x5D:
-      case 0x5E:
-      case 0xB1:
-        unit_pointer = KWP_units_Torque;
-        break;
-      
-      case 0x37:
-      case 0x3C:
-      case 0x3E:
-        unit_pointer = KWP_units_Time;
-        break;
-      
-      case 0x3A:
-      case 0x4E:
-        unit_pointer = KWP_units_Misfires;
-        break;
-      
-      case 0x44:
-      case 0x55:
-      case 0x57:
-      case 0xA6:
-      case 0xB2:
-        unit_pointer = KWP_units_Turn_Rate;
-        break;
-      
-      case 0x46:
-      case 0x52:
-      case 0x54:
-        unit_pointer = KWP_units_Acceleration;
-        break;
-      
-      case 0x47:
-      case 0x9C:
-      case 0x9D:
-        unit_pointer = KWP_units_Distance_c;
-        break;
-      
-      case 0x4A:
-        unit_pointer = KWP_units_Time_mo;
-        break;
-      
-      case 0x4C:
-      case 0x50:
-      case 0x58:
-        unit_pointer = KWP_units_Resistance_k;
-        break;
-      
-      case 0x59:
-      case 0xA3:
-        unit_pointer = KWP_units_Time_h;
-        break;
-      
-      case 0x5A:
-        unit_pointer = KWP_units_Mass_k;
-        break;
-      
-      case 0x62:
-        unit_pointer = KWP_units_Impulses;
-        break;
-      
-      case 0x65:
-        unit_pointer = KWP_units_Fuel_Level_Factor;
-        break;
-      
-      case 0x68:
-        unit_pointer = KWP_units_Volume_m;
-        break;
-      
-      case 0x69:
-      case 0x72:
-        unit_pointer = KWP_units_Distance;
-        break;
-      
-      case 0x6B:
-        snprintf(str, string_size, "%02X %02X", byte_a, byte_b);
-        str[string_size - 1] = '\0';
-        return str;
-      
-      case 0x73:
-        unit_pointer = KWP_units_Power;
-        break;
-      
-      case 0x7C:
-      case 0xA5:
-        unit_pointer = KWP_units_Current_m;
-        break;
-      
-      case 0x7D:
-        unit_pointer = KWP_units_Attenuation;
-        break;
-      
-      case 0x83:
-        unit_pointer = ((float(byte_a) * float(byte_b) / 2.0 - 30.0) < 0) ?  KWP_units_Ignition_BTDC : KWP_units_Ignition_ATDC;
-        break;
-      
-      case 0xA1:
-        snprintf(str, string_size, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(byte_a), BYTE_TO_BINARY(byte_b));
-        str[string_size - 1] = '\0';
-        return str;
-      
-      case 0xA7:
-        unit_pointer = KWP_units_Resistance_m;
-        break;
-      
-      case 0xA9:
-        unit_pointer = KWP_units_Voltage_m;
-        break;
-      
-      case 0xAA:
-      case 0xAB:
-        unit_pointer = KWP_units_Mass;
-        break;
-      
-      case 0xAC:
-        unit_pointer = KWP_units_Mass_Flow_km;
-        break;
-      
-      case 0xAD:
-      case 0xB5:
-        unit_pointer = KWP_units_Mass_Flow_m;
-        break;
-      
-      case 0xAE:
-        unit_pointer = KWP_units_Consumption_1000km;
-        break;
-      
-      case 0xB0:
-        unit_pointer = KWP_units_Parts_Per_Million;
-        break;
-      
-      case 0xB4:
-        unit_pointer = KWP_units_Mass_Per_Stroke_k;
+        unit_pointer =  (MWb < NWb) ? KWP_units_Map1 : KWP_units_Map2;
         break;
       
       //Text from table
@@ -2739,7 +2732,7 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement
           #ifdef KWP1281_TEXT_TABLE_SUPPORTED
             
             //Construct the text code from the two bytes.
-            uint16_t code = (byte_a << 8) | byte_b;
+            uint16_t code = (NWb << 8) | MWb;
             
             //The text code will be used as the key for a binary search.
             struct keyed_struct bsearch_key;
@@ -2776,12 +2769,31 @@ char* KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement
         }
         return str;
       
-      //Date
-      case 0x7F:
-        snprintf(str, string_size, "%04d.%02d.%02d", 2000 + (byte_b & 0x7F), ((byte_a & 0x07) << 1) | ((byte_b & 0x80) >> 7), (byte_a & 0xF8) >> 3);
+      //Time
+      case 0x2C:
+        snprintf(str, string_size, "%02d:%02d", NWb, MWb);
         str[string_size - 1] = '\0';
         return str;
       
+      //Hex bytes
+      case 0x6B:
+        snprintf(str, string_size, "%02X %02X", NWb, MWb);
+        str[string_size - 1] = '\0';
+        return str;
+      
+      //Date
+      case 0x7F:
+        snprintf(str, string_size, "%04d.%02d.%02d", 2000 + (MWb & 0x7F), ((NWb & 0x07) << 1) | ((MWb & 0x80) >> 7), (NWb & 0xF8) >> 3);
+        str[string_size - 1] = '\0';
+        return str;
+      
+      //Binary bytes
+      case 0xA1:
+        snprintf(str, string_size, BYTE_TO_BINARY_PATTERN " " BYTE_TO_BINARY_PATTERN, BYTE_TO_BINARY(NWb), BYTE_TO_BINARY(MWb));
+        str[string_size - 1] = '\0';
+        return str;
+      
+      //Unknown
       default:
         str[0] = '\0';
         return str;

@@ -112,6 +112,9 @@ void loop() {
 }
 
 void showSingleMeasurement(uint8_t block, uint8_t measurement_index) {
+  //This will contain the amount of measurements in the current block, after calling the readGroup() function.
+  uint8_t amount_of_measurements = 0;
+  
   /*
     The readGroup() function can return:
       *KLineKWP1281Lib::SUCCESS - received measurements
@@ -119,54 +122,65 @@ void showSingleMeasurement(uint8_t block, uint8_t measurement_index) {
       *KLineKWP1281Lib::ERROR   - communication error
   */
   
-  uint8_t amount_of_measurements = 0;
-  switch (diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements))) {
+  //Read the requested group and store the return value.
+  KLineKWP1281Lib::executionStatus readGroup_status = diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements));
+  
+  //Check the return value.
+  switch (readGroup_status) {
     case KLineKWP1281Lib::ERROR:
       Serial.println("Error reading measurements!");
-      break;
+      return;
     
     case KLineKWP1281Lib::FAIL:
       Serial.print("Block ");
       Serial.print(block);
       Serial.println(" does not exist!");
-      break;
+      return;
     
+    //Execute the code after the switch().
     case KLineKWP1281Lib::SUCCESS:
-      //Will hold the measurement's units
+      break;
+  }
+  
+  /*
+    The getMeasurementType() function can return:
+      *KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
+      *KLineKWP1281Lib::VALUE   - regular measurement, with a value and units
+      *KLineKWP1281Lib::TEXT    - text measurement
+  */
+  
+  //Display the selected measurement.
+  switch (KLineKWP1281Lib::getMeasurementType(measurement_index, amount_of_measurements, measurements, sizeof(measurements))) {
+    //"Value and units" type
+    case KLineKWP1281Lib::VALUE:
+    {
+      //This will hold the measurement's units.
       char units_string[16];
       
-      /*
-        The getMeasurementType() function can return:
-          *KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
-          *KLineKWP1281Lib::UNITS   - the measurement contains human-readable text in the units string
-          *KLineKWP1281Lib::VALUE   - "regular" measurement, with a value and units
-      */
+      //Determine how many decimal places are best suited to this measurement.
+      uint8_t decimals = KLineKWP1281Lib::getMeasurementDecimals(measurement_index, amount_of_measurements, measurements, sizeof(measurements));
       
-      //Display the selected measurement.
-      switch (KLineKWP1281Lib::getMeasurementType(measurement_index, amount_of_measurements, measurements, sizeof(measurements))) {
-        //Value and units
-        case KLineKWP1281Lib::VALUE:
-        {
-          //Determine how many decimal places are best suited to this measurement.
-          uint8_t decimals = KLineKWP1281Lib::getMeasurementDecimals(measurement_index, amount_of_measurements, measurements, sizeof(measurements));
-          
-          //Display the calculated value, with the recommended amount of decimals.
-          Serial.print(KLineKWP1281Lib::getMeasurementValue(measurement_index, amount_of_measurements, measurements, sizeof(measurements)), decimals);
-          Serial.print(' ');
-          Serial.println(KLineKWP1281Lib::getMeasurementUnits(measurement_index, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
-        }
-        break;
-        
-        //Units string containing text
-        case KLineKWP1281Lib::UNITS:
-          Serial.println(KLineKWP1281Lib::getMeasurementUnits(measurement_index, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
-          break;
-        
-        //Invalid measurement index
-        case KLineKWP1281Lib::UNKNOWN:
-          Serial.println("N/A");
-          break;
-      }
+      //Display the calculated value, with the recommended amount of decimals.
+      Serial.print(KLineKWP1281Lib::getMeasurementValue(measurement_index, amount_of_measurements, measurements, sizeof(measurements)), decimals);
+      Serial.print(' ');
+      Serial.println(KLineKWP1281Lib::getMeasurementUnits(measurement_index, amount_of_measurements, measurements, sizeof(measurements), units_string, sizeof(units_string)));
+    }
+    break;
+    
+    //"Text" type
+    case KLineKWP1281Lib::TEXT:
+    {
+      //This will hold the measurement's text.
+      char text_string[16];
+      
+      //Display the text.
+      Serial.println(KLineKWP1281Lib::getMeasurementText(measurement_index, amount_of_measurements, measurements, sizeof(measurements), text_string, sizeof(text_string)));
+    }
+    break;
+    
+    //Invalid measurement index
+    case KLineKWP1281Lib::UNKNOWN:
+      Serial.println("N/A");
       break;
   }
 }
