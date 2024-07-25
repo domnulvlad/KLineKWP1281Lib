@@ -381,6 +381,7 @@ class KLineKWP1281Lib
     
     //Pointers to custom functions
     callBack_type custom_5baud_wait_function_pointer, custom_error_function_pointer;
+    bool error_function_allowed = false;
     
     //Timers
     uint16_t _timeout;

@@ -236,8 +236,17 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::attemptConnect(uint8_t module,
     //Set the timeout to the appropriate value for receiving regular responses.
     _timeout = responseTimeout;
     
-    //Populate the private struct with the module's identification.
-    return read_identification();
+    //Disable automatically reconnecting upon error, or calling the custom error function.
+    error_function_allowed = false;
+    
+    //(Try to) populate the private struct with the module's identification.
+    executionStatus status = read_identification();
+    
+    //Enable automatically reconnecting upon error, or calling the custom error function.
+    error_function_allowed = true;
+    
+    //Return what read_identification() returned.
+    return status;
   }
   //If something other than the sync byte was received, the baud rate may be incorrect.
   else {
@@ -3719,6 +3728,14 @@ bool KLineKWP1281Lib::send(uint8_t command, uint8_t* parameters, uint8_t paramet
 void KLineKWP1281Lib::error_function()
 {
   show_debug_info(TERMINATED);
+  
+  //If the error function is disabled, don't reconnect.
+  if (!error_function_allowed)
+  {
+    //Indicate that there is no module connected anymore.
+    _current_module = 0;
+    return;
+  }
   
   //If there is a custom function defined, execute it.
   if (custom_error_function_pointer) {
