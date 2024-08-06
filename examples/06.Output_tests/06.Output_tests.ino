@@ -20,7 +20,7 @@
   *If another port is not available on the selected board, the regular port "Serial" can be used, although no information can be printed to it (good for
   projects with external displays or for data logging).
 
-  ***Uncomment the appropriate options in the configuration.h file!
+  ***Uncomment the appropriate options in the "configuration.h" file!
 
   Arduino UNO
     *no additional serial port, software serial is used
@@ -60,54 +60,57 @@
   should be used.
 */
 
-//Include the library.
+// Include the library.
 #include <KLineKWP1281Lib.h>
 
-//Include the two files containing configuration options and the functions used for communication.
+// Include the two files containing configuration options and the functions used for communication.
 #include "configuration.h"
 #include "communication.h"
 
-//Debugging can be enabled in configuration.h in order to print connection-related info on the Serial Monitor.
+// Debugging can be enabled in "configuration.h" in order to print connection-related info on the Serial Monitor.
 #if debug_info
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex, &Serial);
 #else
   KLineKWP1281Lib diag(beginFunction, endFunction, sendFunction, receiveFunction, TX_pin, is_full_duplex);
 #endif
 
-//How many milliseconds to idle on each output test
+// How many milliseconds to idle on each output test
 #define WAIT_TIME_MS 5000
 
-void setup() {
-  //Initialize the Serial Monitor.
+void setup()
+{
+  // Initialize the Serial Monitor.
   Serial.begin(115200);
   delay(500);
   Serial.println("Sketch started.");
   
-  //If debugging bus traffic was enabled, attach the debugging function.
+  // If debugging bus traffic was enabled, attach the debugging function.
 #if debug_traffic
   diag.KWP1281debugFunction(KWP1281debugFunction);
 #endif
   
-  //Change these according to your module, in configuration.h.
-  diag.connect(connect_to_module, module_baud_rate);
+  // Connect to the module.
+  diag.connect(connect_to_module, module_baud_rate, false);
   
-  //Perform all output tests (procedure moved to a function).
+  // Perform all output tests (procedure moved to a function).
   Serial.println("Performing output tests.");
   performOutputTests();
 
-  //Disconnect from the module.
-  diag.disconnect();
+  // Disconnect from the module.
+  diag.disconnect(false);
   Serial.println("Disconnected.");
 }
 
-void loop() {
+void loop()
+{
   
 }
 
-void performOutputTests() {
-  //Output tests are always performed in a predefined sequence that cannot be changed.
-  //It is possible to determine which output test is currently running, as they return a value.
-  //This value is technically a fault code, so its description can be retrieved.
+void performOutputTests()
+{
+  // Output tests are always performed in a predefined sequence that cannot be changed.
+  // It is possible to determine which output test is currently running, as they return a value.
+  // This value is technically a fault code, so its description can be retrieved.
   uint16_t current_output_test;
   
   /*
@@ -117,24 +120,24 @@ void performOutputTests() {
       *KLineKWP1281Lib::ERROR   - communication error
   */
   
-  //Run the first output test and store the return value.
+  // Run the first output test and store the return value.
   KLineKWP1281Lib::executionStatus outputTests_status = diag.outputTests(current_output_test);
   
-  //Continue running output tests until something other than SUCCESS is returned.
+  // Continue running output tests until something other than SUCCESS is returned.
   while (outputTests_status == KLineKWP1281Lib::SUCCESS)
   {
-    //Declare a character array and use it to store the description string.
+    // Declare a character array and use it to store the description string.
     char description_string[32];
     KLineKWP1281Lib::getOutputTestDescription(current_output_test, description_string, sizeof(description_string));
     
-    //Display the output test description.
+    // Display the output test description.
     Serial.print("Performing output test: ");
     Serial.print(description_string);
     
-    //Get the full length of the description string, to warn the user if the provided buffer wasn't large enough to store the entire string.
+    // Get the full length of the description string, to warn the user if the provided buffer wasn't large enough to store the entire string.
     size_t description_string_length = KLineKWP1281Lib::getOutputTestDescriptionLength(current_output_test);
     
-    //If the buffer was too small, display an ellipsis and indicate how many characters would have been needed for the entire string.
+    // If the buffer was too small, display an ellipsis and indicate how many characters would have been needed for the entire string.
     if (description_string_length > (sizeof(description_string) - 1))
     {
       Serial.print("... (");
@@ -145,26 +148,26 @@ void performOutputTests() {
     }
     Serial.println();
     
-    //Wait as many milliseconds as specified by WAIT_TIME_MS.
-    //The communication is kept alive by update() while waiting.
+    // Wait as many milliseconds as specified by WAIT_TIME_MS.
+    // The communication is kept alive by update() while waiting.
     unsigned long start_time = millis();
     while (millis() - start_time <= WAIT_TIME_MS)
     {
       diag.update();
     }
     
-    //Run the next output test.
+    // Run the next output test.
     outputTests_status = diag.outputTests(current_output_test);
   }
   
-  //At this point, the loop above was stopped because either FAIL or ERROR was returned.
+  // At this point, the loop above was stopped because either FAIL or ERROR was returned.
   
-  //If FAIL was returned, the output test sequence is complete.
+  // If FAIL was returned, the output test sequence is complete.
   if (outputTests_status == KLineKWP1281Lib::FAIL)
   {
     Serial.println("End of output tests");
   }
-  //If ERROR was returned, a communication error probably occurred.
+  // If ERROR was returned, a communication error probably occurred.
   else
   {
     Serial.println("Error performing output tests");

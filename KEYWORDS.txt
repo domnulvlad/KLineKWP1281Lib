@@ -90,4 +90,6 @@ blockDelay	LITERAL1
 
 initResponseTimeout	LITERAL1
 complementResponseTimeout	LITERAL1
+echoTimeout	LITERAL1
 responseTimeout	LITERAL1
+byteTimeout	LITERAL1

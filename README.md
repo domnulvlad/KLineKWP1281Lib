@@ -1,6 +1,8 @@
 ## KLineKWP1281Lib
 **KLineKWP1281Lib**  is a library designed for communicating with VAG control modules which use the proprietary VAG Key-Word 1281 protocol (KWP1281/KW1281), through an Arduino / ESP / RPi Pico development board.
 
+For a library targeted strictly at the ESP32, optimized for the FreeRTOS operating system, check out **[KLineKWP1281Lib_ESP32](https://github.com/domnulvlad/KLineKWP1281Lib_ESP32)**.
+
 ## Supported features:
 - **Ability to use any method to send and receive data** (best being a hardware serial port, or software serial if an additional port is not available)
 - Ability to keep the connection alive while doing other tasks
@@ -16,7 +18,6 @@
 - Reading ROM / EEPROM (firmware)
 - Performing actuator tests
 - Performing basic settings
-- Implied multi-instance support for managing multiple K-lines at the same time by using a multitasking-capable platform (ESP32 example included)
 
 ## Getting started
 Download [the latest release (.zip)](https://github.com/domnulvlad/KLineKWP1281Lib/releases/latest) and [add it to your Arduino IDE](https://docs.arduino.cc/software/ide-v1/tutorials/installing-libraries#importing-a-zip-library).
