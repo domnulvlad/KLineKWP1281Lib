@@ -31,4 +31,4 @@ Thanks go out to these people for their efforts:
 * [Mike Naberezny](https://github.com/mnaberez/vwradio/blob/main/kwp1281_tool/firmware/kwp1281.h), for more insight about the commands and parameters
 
 ## Contact
-For any inquiries, you can open an issue or contact me at [ne555timer@yahoo.com](mailto:ne555timer@yahoo.com).
+For any inquiries, you can open an issue or contact me at [ne555timer@yahoo.com](mailto:ne555timer@yahoo.com) (but don't include any links in the email, as it will be marked as spam).
