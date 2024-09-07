@@ -262,6 +262,9 @@ class KLineKWP1281Lib
     // Get the text of a measurement of type TEXT - measurement data and length needed
     static char* getMeasurementText(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size);
     static char* getMeasurementText(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size);
+    // Get the length of the text of a measurement of type TEXT - measurement data and length needed
+    static size_t getMeasurementTextLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
+    static size_t getMeasurementTextLength(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length);
     // Get the recommended decimal places of a measurement (of type VALUE) - only formula byte needed
     static uint8_t getMeasurementDecimals(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     static uint8_t getMeasurementDecimals(uint8_t formula);

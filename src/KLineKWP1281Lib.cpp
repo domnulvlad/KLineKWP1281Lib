@@ -296,7 +296,7 @@ void KLineKWP1281Lib::connect(uint8_t module, unsigned long baud_rate, bool requ
 {
   while (attemptConnect(module, baud_rate, request_extra_identification) != SUCCESS)
   {
-    // If connection fails, wait one second before retying.
+    // If connection fails, wait one second before retrying.
     delay(1000);
   }
 }
@@ -2937,6 +2937,176 @@ char *KLineKWP1281Lib::getMeasurementText(uint8_t formula, uint8_t *measurement_
   }
 
   return str;
+}
+
+/**
+  Function:
+    getMeasurementTextLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    getMeasurementTextLength(uint8_t formula, uint8_t measurement_data[], uint8_t measurement_data_length)
+
+  Parameters (1):
+    measurement_index       -> index of the measurement whose text length must be determined (0-4)
+    amount_of_measurements  -> total number of measurements stored in the array (value passed as reference to readGroup())
+    measurement_buffer      -> array in which measurements have been stored by readGroup()
+    measurement_buffer_size -> total size of the given array (provided with the sizeof() operator)
+
+  Parameters (2):
+    formula                 -> byte returned by getFormula()
+    measurement_data        -> buffer returned by getMeasurementData()
+    measurement_data_length -> byte returned by getMeasurementDataLength()
+
+  Returns:
+    size_t -> the length of the measurement's text
+
+  Description:
+    Provides the length of the text for a measurement of type TEXT.
+
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+size_t KLineKWP1281Lib::getMeasurementTextLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+{
+  // Determine the formula.
+  uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+
+  // Determine the measurement data and length.
+  uint8_t *measurement_data = getMeasurementData(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  uint8_t measurement_data_length = getMeasurementDataLength(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+
+  // Use the other function.
+  return getMeasurementTextLength(formula, measurement_data, measurement_data_length);
+}
+
+size_t KLineKWP1281Lib::getMeasurementTextLength(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length)
+{
+  // If an invalid buffer was provided, return 0.
+  if (!measurement_data || !measurement_data_length)
+  {
+    return 0;
+  }
+
+  // Cannot retrieve text for measurements of type VALUE or UNKNOWN.
+  if (getMeasurementType(formula) != TEXT)
+  {
+    return 0;
+  }
+
+  // Handle formulas 3F, 5F, 76.
+  if (is_long_block(formula))
+  {
+    switch (formula)
+    {
+    // ASCII long text
+    case 0x3F:
+    case 0x5F:
+      // Each byte will take 1 character.
+      return measurement_data_length;
+      
+    // Hex bytes
+    case 0x76:
+      // Each byte will take 2 characters.
+      return 2 * measurement_data_length;
+    }
+
+    return 0;
+  }
+  // Handle all other formulas.
+  else
+  {
+    // Get the two significant data bytes.
+    uint8_t NWb = measurement_data[0], MWb = measurement_data[1];
+
+    // This will point to one of the strings stored in from "units.h", which will be copied into the given string.
+    const char *unit_pointer = nullptr;
+    switch (formula)
+    {
+    // Warm/Cold
+    case 0x0A:
+      unit_pointer = MWb ? KWP_units_Warm : KWP_units_Cold;
+      break;
+
+    // Switch positions
+    case 0x10:
+    case 0x88:
+      return 8;
+
+    // 2 ASCII letters
+    case 0x11:
+    case 0x8E:
+      return 2;
+
+    // Map1/Map2
+    case 0x1D:
+      unit_pointer = (MWb < NWb) ? KWP_units_Map1 : KWP_units_Map2;
+      break;
+
+    // Text from table
+    case 0x25:
+    case 0x7B:
+    {
+#ifdef KWP1281_TEXT_TABLE_SUPPORTED
+
+      // Construct the text code from the two bytes.
+      uint16_t code = (NWb << 8) | MWb;
+
+      // The text code will be used as the key for a binary search.
+      struct keyed_struct bsearch_key;
+      bsearch_key.code = code;
+
+      // Binary search the key in the text table.
+      struct keyed_struct *result = (struct keyed_struct *)bsearch(
+          &bsearch_key, text_table_entries, ARRAYSIZE(text_table_entries),
+          sizeof(struct keyed_struct), compare_keyed_structs);
+
+      // If the text is found, return its length.
+      if (result)
+      {
+        // Retrieve the structure from PROGMEM.
+        keyed_struct struct_from_PGM;
+        memcpy_P((void *)&struct_from_PGM, result, sizeof(keyed_struct));
+        
+        // Return the string length.
+        return strlen_P(struct_from_PGM.text);
+      }
+      // Otherwise, return 0.
+      else
+      {
+        return 0;
+      }
+
+#else
+
+      return strlen("EN_f25");
+
+#endif
+    }
+      return 0;
+
+    // Time
+    case 0x2C:
+      return 5;
+
+    // Hex bytes
+    case 0x6B:
+      return 5;
+
+    // Date
+    case 0x7F:
+      return 10;
+
+    // Binary bytes
+    case 0xA1:
+      return 17;
+
+    // Unknown
+    default:
+      return 0;
+    }
+
+    return strlen_P(unit_pointer);
+  }
+
+  return 0;
 }
 
 /**
