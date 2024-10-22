@@ -1643,56 +1643,17 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
   }
     return SUCCESS;
 
-// 3B0 907 557 C  SIMOS HS D03
-  case TYPE_GROUP_READING_SIMOS:
+  case TYPE_GROUP_READING_SIMOS: // HEADER
   {
-    // Initial response (type 0x02 non standard (Also used for Request Write ROM))
-    show_debug_info(RECEIVED_GROUP);
-
-    // If the measurements can't fit in the given buffer, it's considered a fatal error.
-    // This is because it might not be possible to count how many measurements were received, if the data is incomplete.
-    if (bytes_received > measurement_buffer_size)
-    {
-      show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
-      return ERROR;
-    }
-
-    // Compute Measurements (depending on group 1 or >1)
-    // TODO
-    // Some overview how I did it for the : 
-    /*
-      if (s[2] == 0x02) {
-
-        engine_rpm = (uint16_t) (0.2 * s[4] * s[5]);            // Maybe wrong forumula
-
-        coolant_temp = (uint8_t) (s[7] * (s[8] - 100) * 0.1);   // Wrong formula
-
-        voltage = 0.001 * s[10] * s[11];                        // Maybe wrong formula
-
-        Binary bits 1 0 0 0   0 0 1 1                           // ????
-        SENSOR_TYPE = 0x24
-      
-      }
-    */
+    show_debug_info(RECEIVED_GROUP_SIMOS_HEADER); // Initial response (type 0x02 non standard (Also used for Request Write ROM))  e.g. 3B0 907 557 C  SIMOS HS D03
+    // To implement
   }
     return SUCCESS;
 
-// 3B0 907 557 C  SIMOS HS D03
-  case TYPE_BASIC_SETTING: // For SIMOS ECU a group reading response can have 0xF4 = BASIC SETTING MESSAGE TYPE (Its crazy..)
+  case TYPE_BASIC_SETTING: // BODY (4 bytes are b values for formula)  e.g. 3B0 907 557 C  SIMOS HS D03
   {
-    // After initial response
-    // TODO/TODEBUG no idea
-    show_debug_info(RECEIVED_GROUP);
-
-    // If the measurements can't fit in the given buffer, it's considered a fatal error.
-    // This is because it might not be possible to count how many measurements were received, if the data is incomplete.
-    if (bytes_received > measurement_buffer_size)
-    {
-      show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
-      return ERROR;
-    }
-
-    // TODO
+    show_debug_info(RECEIVED_GROUP_SIMOS_BODY); // Sends payload since header contains most information
+    // To implement
   }
     return SUCCESS;
 
@@ -4276,6 +4237,14 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type, uint8_t parameter)
 
   case RECEIVED_GROUP:
     K_LOG_DEBUG("Received measurement group\n");
+    break;
+  
+  case RECEIVED_GROUP_SIMOS_HEADER:
+    K_LOG_DEBUG("Received SIMOS header\n");
+    break;
+  
+  case RECEIVED_GROUP_SIMOS_BODY:
+    K_LOG_DEBUG("Received SIMOS body\n");
     break;
 
   case READ_ROM_NOT_SUPPORTED:
