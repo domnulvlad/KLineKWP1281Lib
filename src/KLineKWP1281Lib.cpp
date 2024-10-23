@@ -1726,6 +1726,20 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
   }
   return SUCCESS;
 
+  case TYPE_GROUP_READING_SIMOS: // HEADER
+  {
+    show_debug_info(RECEIVED_GROUP_SIMOS_HEADER); // Initial response (type 0x02 non standard (Also used for Request Write ROM))  e.g. 3B0 907 557 C  SIMOS HS D03
+    // To implement
+  }
+    return SUCCESS;
+
+  case TYPE_BASIC_SETTING: // BODY (4 bytes are b values for formula)  e.g. 3B0 907 557 C  SIMOS HS D03
+  {
+    show_debug_info(RECEIVED_GROUP_SIMOS_BODY); // Sends payload since header contains most information
+    // To implement
+  }
+    return SUCCESS;
+
   default:
     show_debug_info(UNEXPECTED_RESPONSE);
     return ERROR;
@@ -4003,6 +4017,9 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive_message(size_t *bytes_rece
   case KWP_RECEIVE_GROUP_READING:
     return TYPE_GROUP_READING;
 
+  case KWP_RECEIVE_GROUP_SIMOS:
+    return TYPE_GROUP_READING_SIMOS;
+
   case KWP_RECEIVE_ROM:
     return TYPE_ROM;
 
@@ -4327,6 +4344,14 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type, uint8_t parameter)
 
   case RECEIVED_GROUP:
     K_LOG_DEBUG("Received measurement group\n");
+    break;
+  
+  case RECEIVED_GROUP_SIMOS_HEADER:
+    K_LOG_DEBUG("Received SIMOS header\n");
+    break;
+  
+  case RECEIVED_GROUP_SIMOS_BODY:
+    K_LOG_DEBUG("Received SIMOS body\n");
     break;
 
   case READ_ROM_NOT_SUPPORTED:

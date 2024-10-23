@@ -306,9 +306,10 @@ class KLineKWP1281Lib
     static const uint8_t KWP_RECEIVE_ADAPTATION      = 0xE6; // request: KWP_REQUEST_ADAPTATION/KWP_REQUEST_ADAPTATION_TEST/KWP_REQUEST_ADAPTATION_SAVE
     static const uint8_t KWP_RECEIVE_GROUP_HEADER    = 0x02; // request: KWP_REQUEST_GROUP_READING
     static const uint8_t KWP_RECEIVE_GROUP_READING   = 0xE7; // request: KWP_REQUEST_GROUP_READING
+    static const uint8_t KWP_RECEIVE_GROUP_SIMOS     = 0x02; // request: KWP_REQUEST_GROUP_READING (initial send for SIMOS ECU) (NON STANDARD)
     static const uint8_t KWP_RECEIVE_ROM             = 0xFD; // request: KWP_REQUEST_READ_ROM
     static const uint8_t KWP_RECEIVE_OUTPUT_TEST     = 0xF5; // request: KWP_REQUEST_OUTPUT_TEST
-    static const uint8_t KWP_RECEIVE_BASIC_SETTING   = 0xF4; // request: KWP_REQUEST_BASIC_SETTING
+    static const uint8_t KWP_RECEIVE_BASIC_SETTING   = 0xF4; // request: KWP_REQUEST_BASIC_SETTING (or KWP_REQUEST_GROUP_READING (after initial send for SIMOS ECU) (NON STANDARD))
 
     // Callback functions
     beginFunction_type        _beginFunction;
@@ -337,6 +338,7 @@ class KLineKWP1281Lib
       TYPE_ADAPTATION,
       TYPE_GROUP_HEADER,
       TYPE_GROUP_READING,
+      TYPE_GROUP_READING_SIMOS,
       TYPE_ROM,
       TYPE_OUTPUT_TEST,
       TYPE_BASIC_SETTING
@@ -382,6 +384,8 @@ class KLineKWP1281Lib
       INVALID_GROUP_BODY_LENGTH,
       GROUP_BODY_NO_HEADER,
       RECEIVED_GROUP,
+      RECEIVED_GROUP_SIMOS_HEADER,
+      RECEIVED_GROUP_SIMOS_BODY
 
       READ_ROM_NOT_SUPPORTED,
       RECEIVED_ROM,
