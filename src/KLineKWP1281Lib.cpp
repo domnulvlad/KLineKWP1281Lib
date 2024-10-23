@@ -1551,19 +1551,21 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
 
 /**
   Function:
-    readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t measurement_buffer[], size_t measurement_buffer_size)
+    readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t measurement_buffer[], size_t measurement_buffer_size, bool have_header)
 
   Parameters:
     amount_of_measurements  -> will contain the total number of measurements in the group
     group                   -> measurement group to read
     measurement_buffer      -> array into which to store the measurements
     measurement_buffer_size -> total (maximum) length of the given array
+    have_header             -> whether or not the given measurement_buffer already contains the header of a special "header+body" response
 
   Returns:
     executionStatus -> whether or not the operation executed successfully
        SUCCESS
        FAIL
        ERROR
+       GROUP_HEADER -> the header of a special "header+body" response was encountered, and was stored in the given array
 
   Description:
     Reads a measurement group.
@@ -1572,8 +1574,14 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
     *The measurements are stored in the following order: FORMULA, BYTE_A, BYTE_B, but some measurements can contain more data bytes.
     *The getMeasurementValue() function can be used to easily get the calculated values stored in the buffer by readGroup().
     *getMeasurementValue() is a static function so it does not require an instance to be used.
+    
+    *If this function returns GROUP_HEADER, the measurement_buffer is filled with measurements, but they have "default" values, so not real data!
+    *Then, if you request the same group, make sure to provide the same measurement_buffer and also set have_header=true, so the buffer gets filled
+    with real data when the "body" is received; then, SUCCESS will be returned as normal.
+    *When requesting a new group, make sure have_header=false.
+    *If the "body" message is received, but have_header is false, the function will return FAIL!
 */
-KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t *measurement_buffer, size_t measurement_buffer_size)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t *measurement_buffer, size_t measurement_buffer_size, bool have_header)
 {
   // If an error occurs, report 0 measurements.
   amount_of_measurements = 0;
@@ -1608,6 +1616,81 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
   case TYPE_ACK:
     show_debug_info(RECEIVED_EMPTY_GROUP);
     return FAIL;
+  
+  case TYPE_GROUP_HEADER:
+  {
+    show_debug_info(RECEIVED_GROUP_HEADER);
+    
+    // If the measurements can't fit in the given buffer, it's considered a fatal error.
+    if (bytes_received > measurement_buffer_size)
+    {
+      show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
+      return ERROR;
+    }
+    
+    // I assume the header of the special "header+body" response type is always 29 bytes long.
+    if (bytes_received != 29)
+    {
+      show_debug_info(INVALID_GROUP_HEADER_LENGTH, bytes_received);
+      return ERROR;
+    }
+    
+    // TODO: should "long" blocks be supported in "header+body" mode?
+    // I assume the header always contains 4 measurements.
+    
+    // These 4 measurements (2*3 bytes at the start of the response, 2*3 bytes at the end) will be organized to look like a regular readGroup() response.
+    // The first 2 are already where they should be, only need to copy the last 2 from the end of the response, so they will be next to the first 2.
+    memcpy(&measurement_buffer[6], &measurement_buffer[23], 6);
+    
+    // Move all 4 measurements by 4 bytes to the right, leaving room at the start of the buffer for the "body" response.
+    // The array already needs to be large enough to contain the header, so there is enough space.
+    memmove(&measurement_buffer[4], measurement_buffer, 12);
+    
+    // Report that no measurements were received, so this response can't be used for functions like getMeasurementValue().
+    amount_of_measurements = 0;
+  }
+  return GROUP_HEADER;
+  
+  case TYPE_BASIC_SETTING: // TYPE_GROUP_BODY, same opcode
+  {
+    show_debug_info(RECEIVED_GROUP_BODY);
+    
+    // If the measurements can't fit in the given buffer, it's considered a fatal error.
+    if (bytes_received > measurement_buffer_size)
+    {
+      show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
+      return ERROR;
+    }
+    
+    // I assume the body of the special "header+body" response type is always 4 bytes long.
+    if (bytes_received != 4)
+    {
+      show_debug_info(INVALID_GROUP_BODY_LENGTH, bytes_received);
+      return ERROR;
+    }
+    
+    // The header for this group must have been received beforehand and indicated through have_header=true.
+    if (!have_header)
+    {
+      show_debug_info(GROUP_BODY_NO_HEADER);
+      return ERROR;
+    }
+    
+    // If have_header=true, the user promises that measurement_buffer contains measurements (offset right by 4 bytes), waiting for the "default" values
+    // to be replaced by real values.
+    // Replace the MWb of each measurement with what was just received.
+    measurement_buffer[6] = measurement_buffer[0];
+    measurement_buffer[9] = measurement_buffer[1];
+    measurement_buffer[12] = measurement_buffer[2];
+    measurement_buffer[15] = measurement_buffer[3];
+    
+    // Move all bytes back left.
+    memmove(measurement_buffer, &measurement_buffer[4], 12);
+    
+    // Report that 4 measurements were received.
+    amount_of_measurements = 4;
+  }
+  return SUCCESS;
 
   case TYPE_GROUP_READING:
   {
@@ -1641,7 +1724,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
       buffer_index += measurement_length;
     }
   }
-    return SUCCESS;
+  return SUCCESS;
 
   default:
     show_debug_info(UNEXPECTED_RESPONSE);
@@ -3914,6 +3997,9 @@ KLineKWP1281Lib::RETURN_TYPE KLineKWP1281Lib::receive_message(size_t *bytes_rece
   case KWP_RECEIVE_ADAPTATION:
     return TYPE_ADAPTATION;
 
+  case KWP_RECEIVE_GROUP_HEADER:
+    return TYPE_GROUP_HEADER;
+
   case KWP_RECEIVE_GROUP_READING:
     return TYPE_GROUP_READING;
 
@@ -4142,10 +4228,7 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type, uint8_t parameter)
   switch (type)
   {
   case UNEXPECTED_RESPONSE:
-    K_LOG_ERROR("Unexpected response (");
-    K_LOG_ERROR_(parameter >> 4, HEX);
-    K_LOG_ERROR_(parameter & 0xF, HEX);
-    K_LOG_ERROR_(")\n");
+    K_LOG_ERROR("Unexpected response\n");
     break;
 
   case SEND_ERROR:
@@ -4215,7 +4298,31 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type, uint8_t parameter)
     break;
 
   case RECEIVED_EMPTY_GROUP:
-    K_LOG_ERROR("Empty measurement group\n");
+    K_LOG_DEBUG("Empty measurement group\n");
+    break;
+
+  case RECEIVED_GROUP_HEADER:
+    K_LOG_DEBUG("Received measurement group header\n");
+    break;
+
+  case INVALID_GROUP_HEADER_LENGTH:
+    K_LOG_ERROR("Expected 29 bytes, got ");
+    K_LOG_ERROR_(parameter);
+    K_LOG_ERROR_("\n");
+    break;
+
+  case RECEIVED_GROUP_BODY:
+    K_LOG_DEBUG("Received measurement group body\n");
+    break;
+
+  case INVALID_GROUP_BODY_LENGTH:
+    K_LOG_ERROR("Expected 4 bytes, got ");
+    K_LOG_ERROR_(parameter);
+    K_LOG_ERROR_("\n");
+    break;
+
+  case GROUP_BODY_NO_HEADER:
+    K_LOG_ERROR("Received measurement group body without header\n");
     break;
 
   case RECEIVED_GROUP:
@@ -4426,6 +4533,11 @@ void KLineKWP1281Lib::show_debug_command_description(bool direction, uint8_t com
   case KWP_RECEIVE_BASIC_SETTING:
     if (direction) {K_LOG_DEBUG("Received ");} else {K_LOG_DEBUG("Sent ");}
     K_LOG_DEBUG_("\"Provide basic setting\"\n");
+    break;
+
+  case KWP_RECEIVE_GROUP_HEADER:
+    if (direction) {K_LOG_DEBUG("Received ");} else {K_LOG_DEBUG("Sent ");}
+    K_LOG_DEBUG_("\"Provide group header\"\n");
     break;
 
   case KWP_RECEIVE_GROUP_READING:

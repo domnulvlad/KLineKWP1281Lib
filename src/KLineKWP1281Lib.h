@@ -125,14 +125,15 @@ class KLineKWP1281Lib
     enum executionStatus {
       FAIL,
       SUCCESS,
-      ERROR
+      ERROR,
+      GROUP_HEADER // Only used for readGroup(), when the first part of a "header+body" response type is encountered
     };
 
     // Measurement types
     enum measurementType {
-      UNKNOWN, //Invalid measurement requested
-      VALUE,   //Measurement has value and units
-      TEXT     //Measurement has text
+      UNKNOWN, // Invalid measurement requested
+      VALUE,   // Measurement has value and units
+      TEXT     // Measurement has text
     };
 
     // Create an instance of the library
@@ -238,7 +239,7 @@ class KLineKWP1281Lib
     static uint8_t getBasicSettingValue(uint8_t value_index, uint8_t amount_of_values, uint8_t* basic_setting_buffer, size_t basic_setting_buffer_size);
 
     // Read a group (block) of measurements
-    executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size);
+    executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size, bool have_header = false);
 
     // Get the 3 significant bytes of a measurement (enough for all measurements of type VALUE)
     static uint8_t getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
@@ -303,6 +304,7 @@ class KLineKWP1281Lib
     static const uint8_t KWP_RECEIVE_ID_DATA         = 0xF6; // request: connect/KWP_REQUEST_EXTRA_ID/KWP_REQUEST_RECODE
     static const uint8_t KWP_RECEIVE_FAULT_CODES     = 0xFC; // request: KWP_REQUEST_FAULT_CODES
     static const uint8_t KWP_RECEIVE_ADAPTATION      = 0xE6; // request: KWP_REQUEST_ADAPTATION/KWP_REQUEST_ADAPTATION_TEST/KWP_REQUEST_ADAPTATION_SAVE
+    static const uint8_t KWP_RECEIVE_GROUP_HEADER    = 0x02; // request: KWP_REQUEST_GROUP_READING
     static const uint8_t KWP_RECEIVE_GROUP_READING   = 0xE7; // request: KWP_REQUEST_GROUP_READING
     static const uint8_t KWP_RECEIVE_ROM             = 0xFD; // request: KWP_REQUEST_READ_ROM
     static const uint8_t KWP_RECEIVE_OUTPUT_TEST     = 0xF5; // request: KWP_REQUEST_OUTPUT_TEST
@@ -333,6 +335,7 @@ class KLineKWP1281Lib
       TYPE_REFUSE,
       TYPE_FAULT_CODES,
       TYPE_ADAPTATION,
+      TYPE_GROUP_HEADER,
       TYPE_GROUP_READING,
       TYPE_ROM,
       TYPE_OUTPUT_TEST,
@@ -373,6 +376,11 @@ class KLineKWP1281Lib
 
       INVALID_MEASUREMENT_GROUP,
       RECEIVED_EMPTY_GROUP,
+      RECEIVED_GROUP_HEADER,
+      INVALID_GROUP_HEADER_LENGTH,
+      RECEIVED_GROUP_BODY,
+      INVALID_GROUP_BODY_LENGTH,
+      GROUP_BODY_NO_HEADER,
       RECEIVED_GROUP,
 
       READ_ROM_NOT_SUPPORTED,

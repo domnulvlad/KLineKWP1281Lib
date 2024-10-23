@@ -76,8 +76,8 @@
 
 // Normally, each measurement takes 3 bytes, and a block can store up to 4 measurements.
 // There are some measurements which take more space.
-// Consider increasing the size of this buffer if you get "Error reading measurements!":
-uint8_t measurements[3 * 4];
+// Some ECUs report data in a different format, starting with a long header, so 29 bytes are needed.
+uint8_t measurements[29];
 
 void setup()
 {
@@ -118,9 +118,10 @@ void showMeasurements(uint8_t block)
   
   /*
     The readGroup() function can return:
-      *KLineKWP1281Lib::SUCCESS - received measurements
-      *KLineKWP1281Lib::FAIL    - the requested block does not exist
-      *KLineKWP1281Lib::ERROR   - communication error
+      *KLineKWP1281Lib::SUCCESS      - received measurements
+      *KLineKWP1281Lib::FAIL         - the requested block does not exist
+      *KLineKWP1281Lib::ERROR        - communication error
+      *KLineKWP1281Lib::GROUP_HEADER - received header for a "header+body" measurement; need to read again
   */
   
   // Read the requested group and store the return value.
@@ -138,6 +139,29 @@ void showMeasurements(uint8_t block)
       Serial.print(block);
       Serial.println(" does not exist!");
       return;
+    
+    // When receiving this, you need to request the same group again, providing the same buffer, and adding a "true" to the end of readGroup().
+    case KLineKWP1281Lib::GROUP_HEADER:
+    {
+      // Read the requested group again and store the return value.
+      // The buffer contains a header, so we set `have_header` (the last parameter) to true.
+      KLineKWP1281Lib::executionStatus readGroup_status2 = diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements), true);
+      
+      // Check the return value.
+      switch (readGroup_status2)
+      {
+        case KLineKWP1281Lib::ERROR:
+        case KLineKWP1281Lib::FAIL:
+        case KLineKWP1281Lib::GROUP_HEADER: // it doesn't make sense to receive a header when expecting a body
+          Serial.println("Error reading body of group!");
+          return;
+        
+        // Execute the code after the switch().
+        case KLineKWP1281Lib::SUCCESS:
+          break;
+      }
+    }
+    return;
     
     // Execute the code after the switch().
     case KLineKWP1281Lib::SUCCESS:
