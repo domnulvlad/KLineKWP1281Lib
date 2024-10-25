@@ -1489,9 +1489,9 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::basicSetting(uint8_t &amount_o
     amount_of_values = bytes_received;
 
     // Determine how many values to copy into the given buffer.
-    uint8_t max_values_inreceive_buffer = sizeof(receive_buffer); // how many values would fit in the receive buffer
-    uint8_t max_values_in_array = basic_setting_buffer_size;      // how many values would fit in the given array
-    uint8_t values_to_copy = min(amount_of_values, min(max_values_inreceive_buffer, max_values_in_array));
+    uint8_t max_values_in_receive_buffer = sizeof(receive_buffer); // how many values would fit in the receive buffer
+    uint8_t max_values_in_array = basic_setting_buffer_size;       // how many values would fit in the given array
+    uint8_t values_to_copy = min(amount_of_values, min(max_values_in_receive_buffer, max_values_in_array));
 
     // Copy the values from the RX buffer into the given array.
     memcpy(basic_setting_buffer, receive_buffer, values_to_copy);
@@ -1565,7 +1565,8 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
        SUCCESS
        FAIL
        ERROR
-       GROUP_HEADER -> the header of a special "header+body" response was encountered, and was stored in the given array
+       GROUP_HEADER        -> the header of a special "header+body" response was encountered, and was stored in the given array
+       GROUP_BASIC_SETTING -> a "basic settings" response was encountered, and was stored in the given array
 
   Description:
     Reads a measurement group.
@@ -1580,6 +1581,10 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
     with real data when the "body" is received; then, SUCCESS will be returned as normal.
     *When requesting a new group, make sure have_header=false.
     *If the "body" message is received, but have_header is false, the function will return FAIL!
+    
+    *If this function returns GROUP_BASIC_SETTING, the measurement_buffer is filled with 10 raw values.
+    *The variable `amount_of_measurements` will be set to 0, so this response can't be used for functions like getMeasurementValue().
+    *These values are just the first 10 bytes of the buffer, you can access them like any other array.
 */
 KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t *measurement_buffer, size_t measurement_buffer_size, bool have_header)
 {
@@ -1653,7 +1658,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
   
   case TYPE_BASIC_SETTING: // TYPE_GROUP_BODY, same opcode
   {
-    show_debug_info(RECEIVED_GROUP_BODY);
+    show_debug_info(RECEIVED_GROUP_BODY_OR_BASIC_SETTING);
     
     // If the measurements can't fit in the given buffer, it's considered a fatal error.
     if (bytes_received > measurement_buffer_size)
@@ -1661,6 +1666,19 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
       show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
       return ERROR;
     }
+    
+    // Process TYPE_BASIC_SETTING responses:
+    
+    // I assume the "basic settings" response type is always 10 bytes long.
+    if (bytes_received == 10)
+    {
+      // Report that no measurements were received, so this response can't be used for functions like getMeasurementValue().
+      // The `measurement_buffer` contains 10 raw values is its first 10 bytes, do with them as you wish.
+      amount_of_measurements = 0;
+      return GROUP_BASIC_SETTING;
+    }
+    
+    // Process TYPE_GROUP_BODY responses:
     
     // I assume the body of the special "header+body" response type is always 4 bytes long.
     if (bytes_received != 4)
@@ -4311,8 +4329,8 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type, uint8_t parameter)
     K_LOG_ERROR_("\n");
     break;
 
-  case RECEIVED_GROUP_BODY:
-    K_LOG_DEBUG("Received measurement group body\n");
+  case RECEIVED_GROUP_BODY_OR_BASIC_SETTING:
+    K_LOG_DEBUG("Received measurement group body or basic setting\n");
     break;
 
   case INVALID_GROUP_BODY_LENGTH:

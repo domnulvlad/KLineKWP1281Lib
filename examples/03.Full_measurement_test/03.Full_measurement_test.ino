@@ -7,6 +7,7 @@
 
   Notes:
     *Measuring blocks 0-255 will be read, after which the connection will be stopped.
+    *Each block will be read 5 times.
     *This sketch will not fit on an Arduino UNO by default!
     *To fix this, open the library's /src/KLineKWP1281Lib.h file in a text editor and comment out the line "#define KWP1281_TEXT_TABLE_SUPPORTED"
     at the top, as explained in the comments.
@@ -116,140 +117,173 @@ void showMeasurements(uint8_t block)
   // This will contain the amount of measurements in the current block, after calling the readGroup() function.
   uint8_t amount_of_measurements = 0;
   
-  /*
-    The readGroup() function can return:
-      *KLineKWP1281Lib::SUCCESS      - received measurements
-      *KLineKWP1281Lib::FAIL         - the requested block does not exist
-      *KLineKWP1281Lib::ERROR        - communication error
-      *KLineKWP1281Lib::GROUP_HEADER - received header for a "header+body" measurement; need to read again
-  */
-  
-  // Read the requested group and store the return value.
-  KLineKWP1281Lib::executionStatus readGroup_status = diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements));
-  
-  // Check the return value.
-  switch (readGroup_status)
+  // When requesting a new group,  modules which report measuring blocks in the "header+body" mode will send a header.
+  // This parameter must be set to true and given to readGroup when the header for the current group is contained in the buffer.
+  bool have_header = false;
+
+  // For modules which report measuring blocks in the "header+body" mode, it is important to do update() when requesting
+  // a new group, so the module sends the group's header.
+  diag.update();
+
+  // The requested group will be read 5 times, if it exists and no error occurs.
+  // If we get a "header+body" measurement, we will do one more step so the actual data requests are 5.
+  for (uint8_t attempt = 1; attempt <= 5; attempt++)
   {
-    case KLineKWP1281Lib::ERROR:
-      Serial.println("Error reading measurements!");
-      return;
-    
-    case KLineKWP1281Lib::FAIL:
-      Serial.print("Block ");
-      Serial.print(block);
-      Serial.println(" does not exist!");
-      return;
-    
-    // When receiving this, you need to request the same group again, providing the same buffer, and adding a "true" to the end of readGroup().
-    case KLineKWP1281Lib::GROUP_HEADER:
+    /*
+      The readGroup() function can return:
+        KLineKWP1281Lib::SUCCESS             - received measurements
+        KLineKWP1281Lib::FAIL                - the requested block does not exist
+        KLineKWP1281Lib::ERROR               - communication error
+        KLineKWP1281Lib::GROUP_HEADER        - received header for a "header+body" measurement; need to read again
+        KLineKWP1281Lib::GROUP_BASIC_SETTING - received a "basic settings" measurement; the buffer contains 10 raw values
+    */
+  
+    // Read the requested group and store the return value.
+    // The last parameter start as false, and will need to be set to true if the header of a "header+body" measurement is received.
+    KLineKWP1281Lib::executionStatus readGroup_status = diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements), have_header);
+
+    // Check the return value.
+    switch (readGroup_status)
     {
-      // Read the requested group again and store the return value.
-      // The buffer contains a header, so we set `have_header` (the last parameter) to true.
-      KLineKWP1281Lib::executionStatus readGroup_status2 = diag.readGroup(amount_of_measurements, block, measurements, sizeof(measurements), true);
-      
+      case KLineKWP1281Lib::ERROR:
+        {
+          Serial.println("Error reading measurements!");
+        }
+        // There is no reason to continue, exit the function.
+        return;
+
+      case KLineKWP1281Lib::FAIL:
+        {
+          Serial.print("Block ");
+          Serial.print(block);
+          Serial.println(" does not exist!");
+        }
+        // There is no reason to continue, exit the function.
+        return;
+
+      case KLineKWP1281Lib::GROUP_HEADER:
+        {
+          // It doesn't make sense to receive a header when we already have it (we are expecting a body).
+          if (have_header)
+          {
+            Serial.println("Error reading group body!");
+            
+            // There is no reason to continue, exit the function.
+            return;
+          }
+          
+          // We now have the header of a "header+body" measurement, it's stored in the `measurements` array.
+          have_header = true;
+          
+          // Add an extra step to the loop.
+          attempt--;
+        }
+        // We have nothing to display yet, the next readGroup() calls will get the actual data; skip this step of the loop.
+        continue;
+
+      case KLineKWP1281Lib::GROUP_BASIC_SETTING:
+        {
+          Serial.print("Basic settings: ");
+          
+          // We have 10 raw values in the `measurements` array.
+          for (uint8_t i = 0; i < 10; i++)
+          {
+            Serial.print(measurements[i]);
+            Serial.print(" ");
+          }
+          Serial.println();
+        }
+        // We have nothing else to display yet; skip this step of the loop.
+        continue;
+
+      // Execute the code after the switch().
+      case KLineKWP1281Lib::SUCCESS:
+        break;
+    }
+
+    // If the block was read successfully, display its measurements.
+    Serial.print("Block ");
+    Serial.print(block);
+    Serial.println(':');
+
+    // Display each measurement.
+    for (uint8_t i = 0; i < 4; i++)
+    {
+      // Format the values with a leading tab.
+      Serial.print('\t');
+
+      // You can retrieve the "formula" byte for a measurement, to avoid giving all these parameters to the other functions.
+      uint8_t formula = KLineKWP1281Lib::getFormula(i, amount_of_measurements, measurements, sizeof(measurements));
+
+      /*
+        The getMeasurementType() function can return:
+           KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
+           KLineKWP1281Lib::VALUE   - regular measurement, with a value and units
+           KLineKWP1281Lib::TEXT    - text measurement
+      */
+
+      // Get the current measurement's type.
+      KLineKWP1281Lib::measurementType measurement_type = KLineKWP1281Lib::getMeasurementType(formula);
+      // If you don't want to extract the "formula" byte as shown above with the getFormula() function, getMeasurementType() can also take the same parameters
+      // like the other functions (index, amount, buffer, buffer_size).
+
       // Check the return value.
-      switch (readGroup_status2)
+      switch (measurement_type)
       {
-        case KLineKWP1281Lib::ERROR:
-        case KLineKWP1281Lib::FAIL:
-        case KLineKWP1281Lib::GROUP_HEADER: // it doesn't make sense to receive a header when expecting a body
-          Serial.println("Error reading body of group!");
-          return;
-        
-        // Execute the code after the switch().
-        case KLineKWP1281Lib::SUCCESS:
+        // "Value and units" type
+        case KLineKWP1281Lib::VALUE:
+          {
+            // You can retrieve the other significant bytes for a measurement, to avoid giving all these parameters to the other functions.
+            uint8_t NWb = KLineKWP1281Lib::getNWb(i, amount_of_measurements, measurements, sizeof(measurements));
+            uint8_t MWb = KLineKWP1281Lib::getMWb(i, amount_of_measurements, measurements, sizeof(measurements));
+
+            // This will hold the measurement's units.
+            char units_string[16];
+
+            // Get the current measurement's value.
+            double value = KLineKWP1281Lib::getMeasurementValue(formula, NWb, MWb);
+            // If you don't want to extract the "formula", "NWb" and "MWb" bytes as shown above with the getFormula(), getNWb() and getMWb() functions,
+            // getMeasurementValue() and getMeasurementUnits() can also take the same parameters like the other functions (index, amount, buffer, buffer_size).
+
+            // Get the current measurement's units.
+            KLineKWP1281Lib::getMeasurementUnits(formula, NWb, MWb, units_string, sizeof(units_string));
+            //The getMeasurementUnits() function returns the same string it's given, units_string in this case.
+
+            //Determine how many decimal places are best suited to this measurement.
+            uint8_t decimals = KLineKWP1281Lib::getMeasurementDecimals(formula);
+            // getMeasurementDecimals() only needs to know the "formula", but you can also give it all parameters as with all other functions.
+
+            // Display the calculated value, with the recommended amount of decimals.
+            Serial.print(value, decimals);
+            Serial.print(' ');
+            Serial.println(units_string);
+          }
+          break;
+
+        // "Text" type
+        case KLineKWP1281Lib::TEXT:
+          {
+            // This will hold the measurement's text.
+            char text_string[16];
+
+            // The only important values are stored in the text string.
+            // The getMeasurementUnits() function needs more data than just those 3 bytes.
+            // It's easier to just give it all parameters, like done here.
+            KLineKWP1281Lib::getMeasurementText(i, amount_of_measurements, measurements, sizeof(measurements), text_string, sizeof(text_string));
+
+            // Display the text.
+            Serial.println(text_string);
+          }
+          break;
+
+        // Invalid measurement index
+        case KLineKWP1281Lib::UNKNOWN:
+          Serial.println("N/A");
           break;
       }
     }
-    return;
-    
-    // Execute the code after the switch().
-    case KLineKWP1281Lib::SUCCESS:
-      break;
-  }
-  
-  // If the block was read successfully, display its measurements.
-  Serial.print("Block ");
-  Serial.print(block);
-  Serial.println(':');
-  
-  // Display each measurement.
-  for (uint8_t i = 0; i < 4; i++)
-  {
-    // Format the values with a leading tab.
-    Serial.print('\t');
-    
-    // You can retrieve the "formula" byte for a measurement, to avoid giving all these parameters to the other functions.
-    uint8_t formula = KLineKWP1281Lib::getFormula(i, amount_of_measurements, measurements, sizeof(measurements));
-    
-    /*
-      The getMeasurementType() function can return:
-        *KLineKWP1281Lib::UNKNOWN - index out of range (measurement doesn't exist in block)
-        *KLineKWP1281Lib::VALUE   - regular measurement, with a value and units
-        *KLineKWP1281Lib::TEXT    - text measurement
-    */
-    
-    // Get the current measurement's type.
-    KLineKWP1281Lib::measurementType measurement_type = KLineKWP1281Lib::getMeasurementType(formula);
-    // If you don't want to extract the "formula" byte as shown above with the getFormula() function, getMeasurementType() can also take the same parameters
-    // like the other functions (index, amount, buffer, buffer_size).
-    
-    // Check the return value.
-    switch (measurement_type)
-    {
-      // "Value and units" type
-      case KLineKWP1281Lib::VALUE:
-      {
-        // You can retrieve the other significant bytes for a measurement, to avoid giving all these parameters to the other functions.
-        uint8_t NWb = KLineKWP1281Lib::getNWb(i, amount_of_measurements, measurements, sizeof(measurements));
-        uint8_t MWb = KLineKWP1281Lib::getMWb(i, amount_of_measurements, measurements, sizeof(measurements));
-        
-        // This will hold the measurement's units.
-        char units_string[16];
-        
-        // Get the current measurement's value.
-        double value = KLineKWP1281Lib::getMeasurementValue(formula, NWb, MWb);
-        // If you don't want to extract the "formula", "NWb" and "MWb" bytes as shown above with the getFormula(), getNWb() and getMWb() functions,
-        // getMeasurementValue() and getMeasurementUnits() can also take the same parameters like the other functions (index, amount, buffer, buffer_size).
-        
-        // Get the current measurement's units.
-        KLineKWP1281Lib::getMeasurementUnits(formula, NWb, MWb, units_string, sizeof(units_string));
-        //The getMeasurementUnits() function returns the same string it's given, units_string in this case.
-        
-        //Determine how many decimal places are best suited to this measurement.
-        uint8_t decimals = KLineKWP1281Lib::getMeasurementDecimals(formula);
-        // getMeasurementDecimals() only needs to know the "formula", but you can also give it all parameters as with all other functions.
-        
-        // Display the calculated value, with the recommended amount of decimals.
-        Serial.print(value, decimals);
-        Serial.print(' ');
-        Serial.println(units_string);
-      }
-      break;
-      
-      // "Text" type
-      case KLineKWP1281Lib::TEXT:
-      {
-        // This will hold the measurement's text.
-        char text_string[16];
-        
-        // The only important values are stored in the text string.
-        // The getMeasurementUnits() function needs more data than just those 3 bytes.
-        // It's easier to just give it all parameters, like done here.
-        KLineKWP1281Lib::getMeasurementText(i, amount_of_measurements, measurements, sizeof(measurements), text_string, sizeof(text_string));
-        
-        // Display the text.
-        Serial.println(text_string);
-      }
-      break;
-      
-      // Invalid measurement index
-      case KLineKWP1281Lib::UNKNOWN:
-        Serial.println("N/A");
-        break;
-    }
-  }
 
-  // Leave an empty line.
-  Serial.println();
+    // Leave an empty line.
+    Serial.println();
+  }
 }

@@ -126,7 +126,8 @@ class KLineKWP1281Lib
       FAIL,
       SUCCESS,
       ERROR,
-      GROUP_HEADER // Only used for readGroup(), when the first part of a "header+body" response type is encountered
+      GROUP_HEADER,       // Only used for readGroup(), when the first part of a "header+body" response type is encountered
+      GROUP_BASIC_SETTING // Only used for readGroup(), when a "basic setting" response type is encountered instead of regular measurements
     };
 
     // Measurement types
@@ -378,7 +379,7 @@ class KLineKWP1281Lib
       RECEIVED_EMPTY_GROUP,
       RECEIVED_GROUP_HEADER,
       INVALID_GROUP_HEADER_LENGTH,
-      RECEIVED_GROUP_BODY,
+      RECEIVED_GROUP_BODY_OR_BASIC_SETTING,
       INVALID_GROUP_BODY_LENGTH,
       GROUP_BODY_NO_HEADER,
       RECEIVED_GROUP,
