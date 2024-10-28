@@ -66,6 +66,18 @@ getMeasurementText	KEYWORD2
 getMeasurementTextLength	KEYWORD2
 getMeasurementDecimals	KEYWORD2
 
+getFormulaFromHeader	KEYWORD2
+getNWbFromHeader	KEYWORD2
+getDataTableFromHeader	KEYWORD2
+getDataTableLengthFromHeader	KEYWORD2
+
+getMeasurementTypeFromHeader	KEYWORD2
+getMeasurementValueFromHeaderBody	KEYWORD2
+getMeasurementUnitsFromHeaderBody	KEYWORD2
+getMeasurementTextFromHeaderBody	KEYWORD2
+getMeasurementTextLengthFromHeaderBody	KEYWORD2
+getMeasurementDecimalsFromHeader	KEYWORD2
+
 readROM	KEYWORD2
 
 outputTests	KEYWORD2
@@ -79,8 +91,9 @@ getOutputTestDescriptionLength	KEYWORD2
 FAIL	LITERAL1
 SUCCESS	LITERAL1
 ERROR	LITERAL1
+GROUP_BASIC_SETTINGS	LITERAL1
 GROUP_HEADER	LITERAL1
-GROUP_BASIC_SETTING	LITERAL1
+GROUP_BODY	LITERAL1
 
 UNKNOWN	LITERAL1
 VALUE	LITERAL1

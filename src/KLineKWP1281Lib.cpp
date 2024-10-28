@@ -1551,42 +1551,35 @@ uint8_t KLineKWP1281Lib::getBasicSettingValue(uint8_t value_index, uint8_t amoun
 
 /**
   Function:
-    readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t measurement_buffer[], size_t measurement_buffer_size, bool have_header)
+    readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t measurement_buffer[], size_t measurement_buffer_size)
 
   Parameters:
     amount_of_measurements  -> will contain the total number of measurements in the group
     group                   -> measurement group to read
     measurement_buffer      -> array into which to store the measurements
     measurement_buffer_size -> total (maximum) length of the given array
-    have_header             -> whether or not the given measurement_buffer already contains the header of a special "header+body" response
 
   Returns:
     executionStatus -> whether or not the operation executed successfully
        SUCCESS
        FAIL
        ERROR
-       GROUP_HEADER        -> the header of a special "header+body" response was encountered, and was stored in the given array
-       GROUP_BASIC_SETTING -> a "basic settings" response was encountered, and was stored in the given array
+       GROUP_BASIC_SETTINGS -> buffer contains 10 raw values
+       GROUP_HEADER -> buffer contains the header of a header+body response
+       GROUP_BODY -> buffer contains the body of a header+body response
 
   Description:
     Reads a measurement group.
 
   Notes:
-    *The measurements are stored in the following order: FORMULA, BYTE_A, BYTE_B, but some measurements can contain more data bytes.
-    *The getMeasurementValue() function can be used to easily get the calculated values stored in the buffer by readGroup().
-    *getMeasurementValue() is a static function so it does not require an instance to be used.
+    *When receiving GROUP_HEADER, it should be "set aside", because its data will be needed when receiving GROUP_BODY.
+    *Alternatively, always use readGroup() with a large enough buffer, and if you receive GROUP_HEADER, switch to a smaller buffer for receiving GROUP_BODY,
+    because that response is generally 4 bytes long, compared to the header which can be even more than 80 bytes long.
     
-    *If this function returns GROUP_HEADER, the measurement_buffer is filled with measurements, but they have "default" values, so not real data!
-    *Then, if you request the same group, make sure to provide the same measurement_buffer and also set have_header=true, so the buffer gets filled
-    with real data when the "body" is received; then, SUCCESS will be returned as normal.
-    *When requesting a new group, make sure have_header=false.
-    *If the "body" message is received, but have_header is false, the function will return FAIL!
-    
-    *If this function returns GROUP_BASIC_SETTING, the measurement_buffer is filled with 10 raw values.
-    *The variable `amount_of_measurements` will be set to 0, so this response can't be used for functions like getMeasurementValue().
-    *These values are just the first 10 bytes of the buffer, you can access them like any other array.
+    *For header+body responses, you need to use the function with suffixes "FromHeader" or "FromHeaderBody".
+    *For example, instead of getMeasurementValue(), you will use getMeasurementValueFromHeaderBody().
 */
-KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t *measurement_buffer, size_t measurement_buffer_size, bool have_header)
+KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t *measurement_buffer, size_t measurement_buffer_size)
 {
   // If an error occurs, report 0 measurements.
   amount_of_measurements = 0;
@@ -1601,7 +1594,7 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
       return ERROR;
     }
   }
-  // Group 0 is requested separately.
+  // Group 0 is requested separately (and is usually of type TYPE_BASIC_SETTING).
   else
   {
     if (!send_message(KWP_REQUEST_GROUP_READING_0))
@@ -1626,33 +1619,37 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
   {
     show_debug_info(RECEIVED_GROUP_HEADER);
     
-    // If the measurements can't fit in the given buffer, it's considered a fatal error.
+    // If the group header can't fit in the given buffer, it's considered a fatal error.
     if (bytes_received > measurement_buffer_size)
     {
       show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
       return ERROR;
     }
     
-    // I assume the header of the special "header+body" response type is always 29 bytes long.
-    if (bytes_received != 29)
+    // Go through each measurement.
+    size_t buffer_index = 0;
+    while (buffer_index < bytes_received)
     {
-      show_debug_info(INVALID_GROUP_HEADER_LENGTH, bytes_received);
-      return ERROR;
+      // Determine the formula of the current measurement.
+      uint8_t formula = measurement_buffer[buffer_index];
+      
+      // Determine the length of the table attached to the current measurement.
+      uint8_t table_length = measurement_buffer[buffer_index + 2];
+      
+      // For formulas 8B (RPM), 8C (Temperature), 8D (Strings) and 93 (Inclination), the table length should not be 0.
+      // For all of them except formula 8D, the table length should be 17.
+      if (((formula == 0x8B || formula == 0x8C || formula == 0x93) && table_length != 17) || (formula == 0x8D && table_length == 0))
+      {
+        show_debug_info(INVALID_GROUP_HEADER_MAP_LENGTH, table_length);
+        return ERROR;
+      }
+      
+      // Count the measurement.
+      amount_of_measurements++;
+      
+      // Skip over the bytes FORMULA, NWB, TABLE_LEN, TABLE.
+      buffer_index += (3 + table_length);
     }
-    
-    // TODO: should "long" blocks be supported in "header+body" mode?
-    // I assume the header always contains 4 measurements.
-    
-    // These 4 measurements (2*3 bytes at the start of the response, 2*3 bytes at the end) will be organized to look like a regular readGroup() response.
-    // The first 2 are already where they should be, only need to copy the last 2 from the end of the response, so they will be next to the first 2.
-    memcpy(&measurement_buffer[6], &measurement_buffer[23], 6);
-    
-    // Move all 4 measurements by 4 bytes to the right, leaving room at the start of the buffer for the "body" response.
-    // The array already needs to be large enough to contain the header, so there is enough space.
-    memmove(&measurement_buffer[4], measurement_buffer, 12);
-    
-    // Report that no measurements were received, so this response can't be used for functions like getMeasurementValue().
-    amount_of_measurements = 0;
   }
   return GROUP_HEADER;
   
@@ -1667,48 +1664,25 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
       return ERROR;
     }
     
-    // Process TYPE_BASIC_SETTING responses:
-    
     // I assume the "basic settings" response type is always 10 bytes long.
     if (bytes_received == 10)
     {
-      // Report that no measurements were received, so this response can't be used for functions like getMeasurementValue().
       // The `measurement_buffer` contains 10 raw values is its first 10 bytes, do with them as you wish.
-      amount_of_measurements = 0;
-      return GROUP_BASIC_SETTING;
+      return GROUP_BASIC_SETTINGS;
     }
-    
-    // Process TYPE_GROUP_BODY responses:
-    
-    // I assume the body of the special "header+body" response type is always 4 bytes long.
-    if (bytes_received != 4)
+    // I assume the body of the "header+body" response type is always at most 4 bytes long.
+    else if (bytes_received <= 4)
     {
-      show_debug_info(INVALID_GROUP_BODY_LENGTH, bytes_received);
-      return ERROR;
+      // Each byte represents the MWb of a measurement.
+      amount_of_measurements = bytes_received;
+      return GROUP_BODY;
     }
-    
-    // The header for this group must have been received beforehand and indicated through have_header=true.
-    if (!have_header)
+    else
     {
-      show_debug_info(GROUP_BODY_NO_HEADER);
-      return ERROR;
+      show_debug_info(INVALID_GROUP_BODY_OR_BASIC_SETTING_LENGTH, bytes_received);
     }
-    
-    // If have_header=true, the user promises that measurement_buffer contains measurements (offset right by 4 bytes), waiting for the "default" values
-    // to be replaced by real values.
-    // Replace the MWb of each measurement with what was just received.
-    measurement_buffer[6] = measurement_buffer[0];
-    measurement_buffer[9] = measurement_buffer[1];
-    measurement_buffer[12] = measurement_buffer[2];
-    measurement_buffer[15] = measurement_buffer[3];
-    
-    // Move all bytes back left.
-    memmove(measurement_buffer, &measurement_buffer[4], 12);
-    
-    // Report that 4 measurements were received.
-    amount_of_measurements = 4;
   }
-  return SUCCESS;
+  return ERROR;
 
   case TYPE_GROUP_READING:
   {
@@ -1726,20 +1700,42 @@ KLineKWP1281Lib::executionStatus KLineKWP1281Lib::readGroup(uint8_t &amount_of_m
     size_t buffer_index = 0;
     while (buffer_index < bytes_received)
     {
-      // Normally, a measurement takes 3 bytes.
-      uint8_t measurement_length = 3;
-
-      // If the measurement is "long", its length is specified in the first byte after the formula.
+      // Determine the current measurement's formula.
       uint8_t formula = measurement_buffer[buffer_index];
-      if (is_long_block(formula))
+      
+      // Determine the current measurement's length.
+      uint8_t measurement_length = get_measurement_length(measurement_buffer, bytes_received, buffer_index);
+      
+      // For formula 3F (ASCII text with unknown length), we need to artificially introduce a length byte, so it looks like formula 5F (ASCII text with known
+      // length), to make it possible to process later.
+      if (formula == 0x3F)
       {
-        // Include the formula byte and the length byte in the count.
-        measurement_length = measurement_buffer[buffer_index + 1] + 2;
+        // We need one more byte.
+        if (bytes_received >= measurement_buffer_size)
+        {
+          show_debug_info(ARRAY_NOT_LARGE_ENOUGH);
+          return ERROR;
+        }
+        
+        // Formula 3F "eats" all bytes after it.
+        // So, the function get_measurement_length() returns the amount of bytes from 3F to the end of the message.
+        // Since we have an extra byte of space available, we can move everything after 3F by one byte to the right.
+        memmove(&measurement_buffer[buffer_index + 2], &measurement_buffer[buffer_index + 1], measurement_length - 1);
+        
+        // Insert our artificial data length byte after 3F.
+        measurement_buffer[buffer_index + 1] = measurement_length - 1;
+        
+        // "Convert" the formula to 5F.
+        measurement_buffer[buffer_index] = 0x5F;
+        
+        // By definition, formula 3F will be the last in the group, so nothing else needs to be changed.
       }
-
-      // Count the measurement and advance the buffer position.
-      amount_of_measurements++;
+      
+      // Increment the buffer index by the measurement's length.
       buffer_index += measurement_length;
+      
+      // Count the measurement.
+      amount_of_measurements++;
     }
   }
   return SUCCESS;
@@ -1782,25 +1778,17 @@ uint8_t KLineKWP1281Lib::getFormula(uint8_t measurement_index, uint8_t amount_of
   size_t buffer_index = 0;
   for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
   {
-    // Normally, a measurement takes 3 bytes.
-    uint8_t measurement_length = 3;
-
-    // If the measurement is "long", its length is specified in the first byte after the formula.
+    // Determine the current measurement's formula.
     uint8_t formula = measurement_buffer[buffer_index];
-    if (is_long_block(formula))
-    {
-      // Include the formula byte and the length byte in the count.
-      measurement_length = measurement_buffer[buffer_index + 1] + 2;
-    }
 
     // If currently on the requested index, return the formula.
     if (current_measurement == measurement_index)
     {
       return formula;
     }
-
-    // Advance the buffer position.
-    buffer_index += measurement_length;
+    
+    // Increment the buffer index by the measurement's length.
+    buffer_index += get_measurement_length(measurement_buffer, 0, buffer_index);
   }
 
   return 0;
@@ -1838,22 +1826,14 @@ uint8_t KLineKWP1281Lib::getNWb(uint8_t measurement_index, uint8_t amount_of_mea
   size_t buffer_index = 0;
   for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
   {
-    // Normally, a measurement takes 3 bytes.
-    uint8_t measurement_length = 3;
-
-    // If the measurement is "long", its length is specified in the first byte after the formula.
+    // Determine the current measurement's formula.
     uint8_t formula = measurement_buffer[buffer_index];
-    if (is_long_block(formula))
-    {
-      // Include the formula byte and the length byte in the count.
-      measurement_length = measurement_buffer[buffer_index + 1] + 2;
-    }
 
     // If currently on the requested index, return NWb.
     if (current_measurement == measurement_index)
     {
-      // If the measurement is "long", NWb doesn't exist.
-      if (is_long_block(formula))
+      // For a few formulas, NWb doesn't exist.
+      if (formula == 0x5F || formula == 0x76 || formula == 0xA0)
       {
         return 0;
       }
@@ -1863,9 +1843,9 @@ uint8_t KLineKWP1281Lib::getNWb(uint8_t measurement_index, uint8_t amount_of_mea
         return measurement_buffer[buffer_index + 1];
       }
     }
-
-    // Advance the buffer position.
-    buffer_index += measurement_length;
+    
+    // Increment the buffer index by the measurement's length.
+    buffer_index += get_measurement_length(measurement_buffer, 0, buffer_index);
   }
 
   return 0;
@@ -1903,22 +1883,14 @@ uint8_t KLineKWP1281Lib::getMWb(uint8_t measurement_index, uint8_t amount_of_mea
   size_t buffer_index = 0;
   for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
   {
-    // Normally, a measurement takes 3 bytes.
-    uint8_t measurement_length = 3;
-
-    // If the measurement is "long", its length is specified in the first byte after the formula.
+    // Determine the current measurement's formula.
     uint8_t formula = measurement_buffer[buffer_index];
-    if (is_long_block(formula))
-    {
-      // Include the formula byte and the length byte in the count.
-      measurement_length = measurement_buffer[buffer_index + 1] + 2;
-    }
 
     // If currently on the requested index, return MWb.
     if (current_measurement == measurement_index)
     {
-      // If the measurement is "long", MWb doesn't exist.
-      if (is_long_block(formula))
+      // For a few formulas, MWb doesn't exist.
+      if (formula == 0x5F || formula == 0x76 || formula == 0xA0)
       {
         return 0;
       }
@@ -1928,9 +1900,9 @@ uint8_t KLineKWP1281Lib::getMWb(uint8_t measurement_index, uint8_t amount_of_mea
         return measurement_buffer[buffer_index + 2];
       }
     }
-
-    // Advance the buffer position.
-    buffer_index += measurement_length;
+    
+    // Increment the buffer index by the measurement's length.
+    buffer_index += get_measurement_length(measurement_buffer, 0, buffer_index);
   }
 
   return 0;
@@ -1969,22 +1941,14 @@ uint8_t *KLineKWP1281Lib::getMeasurementData(uint8_t measurement_index, uint8_t 
   size_t buffer_index = 0;
   for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
   {
-    // Normally, a measurement takes 3 bytes.
-    uint8_t measurement_length = 3;
-
-    // If the measurement is "long", its length is specified in the first byte after the formula.
+    // Determine the current measurement's formula.
     uint8_t formula = measurement_buffer[buffer_index];
-    if (is_long_block(formula))
-    {
-      // Include the formula byte and the length byte in the count.
-      measurement_length = measurement_buffer[buffer_index + 1] + 2;
-    }
 
     // If currently on the requested index, return the measurement data.
     if (current_measurement == measurement_index)
     {
-      // If the measurement is "long", the data starts after the length byte.
-      if (is_long_block(formula))
+      // For a few formulas, the data starts after the length byte.
+      if (formula == 0x5F || formula == 0x76)
       {
         return &measurement_buffer[buffer_index + 2];
       }
@@ -1994,9 +1958,9 @@ uint8_t *KLineKWP1281Lib::getMeasurementData(uint8_t measurement_index, uint8_t 
         return &measurement_buffer[buffer_index + 1];
       }
     }
-
-    // Advance the buffer position.
-    buffer_index += measurement_length;
+    
+    // Increment the buffer index by the measurement's length.
+    buffer_index += get_measurement_length(measurement_buffer, 0, buffer_index);
   }
 
   return nullptr;
@@ -2034,33 +1998,28 @@ uint8_t KLineKWP1281Lib::getMeasurementDataLength(uint8_t measurement_index, uin
   size_t buffer_index = 0;
   for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < measurement_buffer_size; current_measurement++)
   {
-    // Normally, a measurement takes 3 bytes.
-    uint8_t measurement_length = 3;
-
-    // If the measurement is "long", its length is specified in the first byte after the formula.
+    // Determine the current measurement's formula.
     uint8_t formula = measurement_buffer[buffer_index];
-    if (is_long_block(formula))
-    {
-      // Include the formula byte and the length byte in the count.
-      measurement_length = measurement_buffer[buffer_index + 1] + 2;
-    }
+    
+    // Determine the current measurement's length.
+    uint8_t measurement_length = get_measurement_length(measurement_buffer, 0, buffer_index);
 
     // If currently on the requested index, return the measurement data.
     if (current_measurement == measurement_index)
     {
-      // If the measurement is "long", the length is specified by the byte after the formula.
-      if (is_long_block(formula))
+      // For formula 5F (ASCII text with known length) and 76 (HEX bytes with known length), the length is specified in the 2nd byte.
+      if (formula == 0x5F || formula == 0x76)
       {
         return measurement_buffer[buffer_index + 1];
       }
-      // Otherwise, for most measurements, the data length is 2.
+      // Otherwise, for most measurements, the data length is the response length minus the formula byte.
       else
       {
-        return 2;
+        return measurement_length - 1;
       }
     }
-
-    // Advance the buffer position.
+    
+    // Increment the buffer index by the measurement's length.
     buffer_index += measurement_length;
   }
 
@@ -2108,16 +2067,25 @@ KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t mea
 
 KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementType(uint8_t formula)
 {
+  // There are no valid formulas after B5.
+  if (formula > 0xB5)
+  {
+    return UNKNOWN;
+  }
+  
   // Only a few measurement formulas are of the "TEXT" type.
   switch (formula)
   {
-  case 0x00:
+  case 0x00: // N/A
+  case 0x3F: // ASCII long text with unknown length (was converted to 5F by readGroup())
+  case 0x6C: // Environment
+  case 0x6D: // N/A
+  case 0x6E: // Workshop
     return UNKNOWN;
 
   // Long
-  case 0x3F: // ASCII long text
-  case 0x5F: // ASCII long text
-  case 0x76: // Hex bytes
+  case 0x5F: // ASCII long text with known length
+  case 0x76: // Hex bytes with known length
   // Regular
   case 0x0A: // Warm/Cold
   case 0x10: // Switch positions
@@ -2175,12 +2143,12 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t measurement_index, uint8_t a
   // Determine the formula.
   uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
 
-  // Determine NWb and MWb.
-  uint8_t NWb = getNWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-  uint8_t MWb = getMWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  // Retrieve the measurement data and its length.
+  uint8_t *measurement_data = getMeasurementData(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  uint8_t measurement_data_length = getMeasurementDataLength(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
 
   // Use the other function.
-  return getMeasurementValue(formula, NWb, MWb);
+  return getMeasurementValue(formula, measurement_data, measurement_data_length);
 }
 
 double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length)
@@ -2190,9 +2158,38 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t *measuremen
   {
     return 0.0 / 0.0;
   }
-
-  // The data length must be 2.
-  if (measurement_data_length != 2)
+  
+  // Handle formula A0 (measurement with variable units).
+  if (formula == 0xA0)
+  {
+    // The data length must be 5.
+    if (measurement_data_length != 5)
+    {
+      return 0.0 / 0.0;
+    }
+    
+    // Combine BYTE_B and BYTE_C.
+    int32_t WORD_BC = (measurement_data[1] << 8) | measurement_data[2];
+    
+    // Negate the WORD if the highest bit of BYTE_D is set.
+    // Don't negate it if units call for degrees ATDC/BTDC, the value should always be positive.
+    if ((measurement_data[3] & 0x80) && ((measurement_data[4] & 0x3F) != 0x23))
+    {
+      WORD_BC = -WORD_BC;
+    }
+    
+    // Separate BYTE_D into halves.
+    // The upper half should not contain the highest bit of BYTE_D, that was used for the value's sign.
+    uint8_t BYTE_DL = measurement_data[3] & 0xF;
+    uint8_t BYTE_DH = (measurement_data[3] >> 4) & 7;
+    
+    // Calculate the value.
+    // BYTE_DH refers to a negative power of 10, so it will be used as an index into that array.
+    // Having been AND-ed with 7, the maximum value of BYTE_DH is 7; the array has 8 values, so this is safe.
+    return measurement_data[0] * WORD_BC * BYTE_DL * negative_pow_10[BYTE_DH];
+  }
+  // If it's any other formula, the data length must be 2.
+  else if (measurement_data_length != 2)
   {
     return 0.0 / 0.0;
   }
@@ -2210,7 +2207,7 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
   double NW = NWb, MW = MWb;
   switch (formula)
   {
-    //0x00                                                                              //N/A                    [N/A]
+    //0x00 - UNKNOWN                                                                    //N/A                    [N/A]
     case 0x01: return MW * NW * 0.2;                                                    //RPM                    [/min]
     case 0x02: return MW * NW * 0.002;                                                  //Load                   [%]
     case 0x03: return MW * NW * 0.002;                                                  //Throttle angle         [deg]
@@ -2273,7 +2270,7 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
     case 0x3C: return To16Bit(NW, MW) * 1 / 100;                                        //Time resolution        [s]
     case 0x3D: return (MW - 128) / NW;                                                  //Difference             [N/A]
     case 0x3E: return MW * NW * 256 / 1000;                                             //Time                   [s]
-    //0x3F                                                                              //ASCII long text        [text]
+    //0x3F - TEXT (converted to 5F by readGroup())                                      //ASCII long text        [text]
     case 0x40: return MW + NW;                                                          //Resistance             [Ohm]
     case 0x41: return (MW - 127) * NW * 0.01;                                           //Distance               [mm]
     case 0x42: return MW * NW / 512;                                                    //Voltage                [V]
@@ -2305,7 +2302,7 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
     case 0x5C: return NW * MW;                                                          //Mileage                [km]
     case 0x5D: return (MW - 128) * NW * 0.001;                                          //Torque                 [Nm]
     case 0x5E: return NW * (MW - 128) * 0.1;                                            //Torque                 [Nm]
-    //0x5F                                                                              //ASCII long text        [text]
+    //0x5F - TEXT                                                                       //ASCII long text        [text]
     case 0x60: return NW * MW * 0.1;                                                    //Pressure               [mbar]
     case 0x61: return (MW - NW) * 5;                                                    //Cat-temperature        [degC]
     case 0x62: return NW * MW * 0.1;                                                    //Impulses               [/km]
@@ -2318,9 +2315,9 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
     case 0x69: return (MW - 128) * NW * 0.01;                                           //Distance               [m]
     case 0x6A: return (MW - 128) * NW * 0.1;                                            //Speed                  [km/h]
     case 0x6B: return ToSigned(NW, MW);                                                 //Hex bytes              [hex(NWb)hex(MWb)]
-    //0x6C                                                                              //Environment            [N/A]
-    //0x6D                                                                              //N/A                    [N/A]
-    //0x6E                                                                              //Workshop               [N/A]
+    //0x6C - UNKNOWN                                                                    //Environment            [N/A]
+    //0x6D - UNKNOWN                                                                    //N/A                    [N/A]
+    //0x6E - UNKNOWN                                                                    //Workshop               [N/A]
     case 0x6F: return 0x6F0000 | (NWb << 8) | MWb;                                      //Mileage                [km]
     case 0x70: return (MW - 128) * NW * 0.001;                                          //Angle                  [deg]
     case 0x71: return (MW - 128) * NW * 0.01;                                           //N/A                    [N/A]
@@ -2328,7 +2325,7 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
     case 0x73: return ToSigned(NW, MW);                                                 //Power                  [W]
     case 0x74: return ToSigned(NW, MW);                                                 //RPM                    [/min]
     case 0x75: return (MW - 64) * NW * 0.01;                                            //Temperature            [degC]
-    //0x76                                                                              //Hex bytes              [hex]
+    //0x76 - TEXT                                                                       //Hex bytes              [hex]
     case 0x77: return MW * NW * 0.01;                                                   //Percentage             [%]
     case 0x78: return MW * NW * 1.41;                                                   //Angle                  [deg]
     case 0x79: return ((MW * 256) + NW) * 0.5;                                          //N/A                    [N/A]
@@ -2352,15 +2349,15 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
     case 0x88: return MWb & NWb;                                                        //Switch positions       [bin(MWb&nWb)]
     case 0x89: return MW * NW * 0.01;                                                   //Injection time         [ms]
     case 0x8A: return MW * NW * 0.001;                                                  //Knock sensor           [V]
-    //0x8B - values from table, unused                                                  //RPM                    [/min]
-    //0x8C - values from table, unused                                                  //Temperature            [degC]
-    //0x8D - text from table, unused                                                    //Text from table        [text]
+    //0x8B - value mapped through table provided by module                              //RPM                    [/min]
+    //0x8C - value mapped through table provided by module                              //Temperature            [degC]
+    //0x8D - ASCII string from list provided by module                                  //Text from table        [text]
     case 0x8E: return To16Bit(NW, MW);                                                  //2 ASCII letters        [char(NWb)char(MWb)]
     case 0x8F: return (MW - 128) * NW * 0.01;                                           //Ignition angle         [deg]
     case 0x90: return MW * NW * 0.01;                                                   //Consumption            [l/h]
     case 0x91: return MW * NW * 0.01;                                                   //Consumption            [N/A]
     case 0x92: return 1 + ((MW - 128) * NW * 0.0001);                                   //Lambda factor          [N/A]
-    //0x93 - values from table, unused                                                  //Inclination            [%]
+    //0x93 - value mapped through table provided by module                              //Inclination            [%]
     case 0x94: return (MW - 128) * NW * 0.25;                                           //Slip RPM               [N/A]
     case 0x95: return (MW - 100) * NW * 0.1;                                            //Temperature            [degC]
     case 0x96: return (256 * MW + NW) * 1 / 180;                                        //Mass flow              [g/s]
@@ -2373,7 +2370,7 @@ double KLineKWP1281Lib::getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_
     case 0x9D: return ToSigned(NW, MW);                                                 //Distance               [cm]
     case 0x9E: return To16Bit(NW, MW) * 0.01;                                           //Speed                  [km/h]
     case 0x9F: return ((MW - 127) * 256 + NW) * 0.1;                                    //Temperature            [degC]
-    //0xA0                                                                              //N/A                    [N/A]
+    //0xA0 - variable units                                                             //N/A                    [variable]
     case 0xA1: return To16Bit(NW, MW);                                                  //Binary bytes           [bin(NWb)bin(MWb)]
     case 0xA2: return NW * MW * 0.448;                                                  //Angle                  [deg]
     case 0xA3: return MW / 100.0 + NW;                                                  //Time                   [hh:mm]
@@ -2442,24 +2439,111 @@ char *KLineKWP1281Lib::getMeasurementUnits(uint8_t measurement_index, uint8_t am
   // Determine the formula.
   uint8_t formula = getFormula(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
 
-  // Determine NWb and MWb.
-  uint8_t NWb = getNWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
-  uint8_t MWb = getMWb(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  // Retrieve the measurement data and its length.
+  uint8_t *measurement_data = getMeasurementData(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
+  uint8_t measurement_data_length = getMeasurementDataLength(measurement_index, amount_of_measurements, measurement_buffer, measurement_buffer_size);
 
   // Use the other function.
-  return getMeasurementUnits(formula, NWb, MWb, str, string_size);
+  return getMeasurementUnits(formula, measurement_data, measurement_data_length, str, string_size);
 }
 
 char *KLineKWP1281Lib::getMeasurementUnits(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char *str, size_t string_size)
 {
   // If an invalid buffer was provided, return an invalid string.
-  if (!measurement_data || !measurement_data_length)
+  if (!measurement_data || !measurement_data_length || !str || !string_size)
   {
     return nullptr;
   }
-
-  // The data length must be 2.
-  if (measurement_data_length != 2)
+  
+  // Handle formula A0 (measurement with variable units).
+  if (formula == 0xA0)
+  {
+    // The data length must be 5.
+    if (measurement_data_length != 5)
+    {
+      return nullptr;
+    }
+    
+    // Determine the units' prefix.
+    bool has_units_prefix = true;
+    switch (measurement_data[4] >> 6)
+    {
+      case 0: has_units_prefix = false; break;
+      case 1: str[0] = 'k'; break;
+      case 2: str[0] = 'm'; break;
+      case 3: str[0] = 'u'; break;
+    }
+    
+    // This will point to one of the strings stored in from "units.h", which will be copied into the given string.
+    const char *unit_pointer = nullptr;
+    switch (measurement_data[4] & 0x3F)
+    {
+    case 0x01: unit_pointer = KWP_units_Voltage; break;
+    case 0x02: unit_pointer = KWP_units_Vss; break;
+    case 0x03: unit_pointer = KWP_units_Current; break;
+    case 0x04: unit_pointer = KWP_units_Capacity; break;
+    case 0x05: unit_pointer = KWP_units_Resistance; break;
+    case 0x06: unit_pointer = KWP_units_Power; break;
+    case 0x07: unit_pointer = KWP_units_Wm2; break;
+    case 0x08: unit_pointer = KWP_units_Wcm2; break;
+    case 0x09: unit_pointer = KWP_units_Wh; break;
+    case 0x0A: unit_pointer = KWP_units_Ws; break;
+    case 0x0B: unit_pointer = KWP_units_Distance; break;
+    case 0x0C: unit_pointer = KWP_units_ms; break;
+    case 0x0D: unit_pointer = KWP_units_Acceleration; break;
+    case 0x0E: unit_pointer = KWP_units_Distance_c; break;
+    case 0x0F: unit_pointer = KWP_units_Speed; break;
+    case 0x10: unit_pointer = KWP_units_Volume; break;
+    case 0x11: unit_pointer = KWP_units_Consumption_100km; break;
+    case 0x12: unit_pointer = KWP_units_Fuel_Level_Factor; break;
+    case 0x13: unit_pointer = KWP_units_Consumption_h; break;
+    case 0x14: unit_pointer = KWP_units_lkm; break;
+    case 0x15: unit_pointer = KWP_units_Time; break;
+    case 0x16: unit_pointer = KWP_units_Time_h; break;
+    case 0x17: unit_pointer = KWP_units_Time_mo; break;
+    case 0x18: unit_pointer = KWP_units_Mass; break;
+    case 0x19: unit_pointer = KWP_units_Mass_Flow; break;
+    case 0x1A: unit_pointer = KWP_units_Mass_Per_Stroke_m; break;
+    case 0x1B: unit_pointer = KWP_units_Torque; break;
+    case 0x1C: unit_pointer = KWP_units_N; break;
+    case 0x1D: unit_pointer = KWP_units_Pressure; break;
+    case 0x1E: unit_pointer = KWP_units_Angle; break;
+    case 0x1F: unit_pointer = KWP_units_angdeg; break;
+    case 0x20: unit_pointer = KWP_units_Temperature; break;
+    case 0x21: unit_pointer = KWP_units_degF; break;
+    case 0x22: unit_pointer = KWP_units_Turn_Rate; break;
+    case 0x23: break;
+    case 0x24: unit_pointer = KWP_units_RPM; break;
+    case 0x25: unit_pointer = KWP_units_Percentage; break;
+    case 0x26: unit_pointer = KWP_units_Correction; break;
+    case 0x27: unit_pointer = KWP_units_Correction; break;
+    case 0x28: unit_pointer = KWP_units_Misfires; break;
+    case 0x29: unit_pointer = KWP_units_Imp; break;
+    case 0x2A: unit_pointer = KWP_units_Attenuation; break;
+    default:
+      str[0] = '\0';
+      return str;
+    }
+    
+    // Handle units degATDC/BTDC, which depend on the sign of the received value.
+    if ((measurement_data[4] & 0x3F) == 0x23)
+    {
+      if (measurement_data[3] & 0x80) // negative
+      {
+        unit_pointer = KWP_units_Ignition_BTDC;
+      }
+      else // positive
+      {
+        unit_pointer = KWP_units_Ignition_ATDC;
+      }
+    }
+    
+    strncpy_P(str + has_units_prefix, unit_pointer, string_size - has_units_prefix);
+    str[string_size - 1] = '\0';
+    return str;
+  }
+  // If it's any other formula, the data length must be 2.
+  else if (measurement_data_length != 2)
   {
     return nullptr;
   }
@@ -2848,13 +2932,12 @@ char *KLineKWP1281Lib::getMeasurementText(uint8_t formula, uint8_t *measurement_
   // Clear the string, so it's returned empty if the text cannot be determined.
   str[0] = '\0';
 
-  // Handle formulas 3F, 5F, 76.
-  if (is_long_block(formula))
+  // Handle formulas 5F, 76.
+  if (formula == 0x5F || formula == 0x76)
   {
     switch (formula)
     {
     // ASCII long text
-    case 0x3F:
     case 0x5F:
     {
       // Copy the text to the string.
@@ -3092,13 +3175,12 @@ size_t KLineKWP1281Lib::getMeasurementTextLength(uint8_t formula, uint8_t *measu
     return 0;
   }
 
-  // Handle formulas 3F, 5F, 76.
-  if (is_long_block(formula))
+  // Handle formulas 5F, 76.
+  if (formula == 0x5F || formula == 0x76)
   {
     switch (formula)
     {
     // ASCII long text
-    case 0x3F:
     case 0x5F:
       // Each byte will take 1 character.
       return measurement_data_length;
@@ -3245,6 +3327,703 @@ uint8_t KLineKWP1281Lib::getMeasurementDecimals(uint8_t measurement_index, uint8
 
 uint8_t KLineKWP1281Lib::getMeasurementDecimals(uint8_t formula)
 {
+  // Get the value from the table.
+  if (formula < sizeof(KWP_decimals_table))
+  {
+    return KWP_decimals_table[formula];
+  }
+
+  return 0;
+}
+
+/**
+  Function:
+    getFormulaFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
+
+  Parameters:
+    measurement_index      -> index of the measurement whose formula must be determined (0-4)
+    amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
+    header_buffer          -> array in which a header has been stored by readGroup()
+    header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    uint8_t -> formula byte
+
+  Description:
+    Retrieves the formula byte for a measurement from a buffer filled by readGroup() after it returned GROUP_HEADER.
+
+  Notes:
+    *Only use this function if readGroup() returned GROUP_HEADER.
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getFormulaFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size)
+{
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return 0;
+  }
+
+  // Go through each measurement template, returning the formula when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < header_buffer_size; current_measurement++)
+  {
+    // Determine the length of the table attached to the template.
+    uint8_t table_length = header_buffer[buffer_index + 2];
+    
+    // If currently on the requested index, return the formula.
+    if (current_measurement == measurement_index)
+    {
+      return header_buffer[buffer_index];
+    }
+    
+    // Skip over the FORMULA, NWB, TABLE_LEN, TABLE.
+    buffer_index += (3 + table_length);
+  }
+
+  return 0;
+}
+
+/**
+  Function:
+    getNWbFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
+
+  Parameters:
+    measurement_index      -> index of the measurement whose formula must be determined (0-4)
+    amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
+    header_buffer          -> array in which a header has been stored by readGroup()
+    header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    uint8_t -> NWb (byte A)
+
+  Description:
+    Retrieves byte A for a measurement from a buffer filled by readGroup() after it returned GROUP_HEADER.
+
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getNWbFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size)
+{
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return 0;
+  }
+
+  // Go through each measurement template, returning NWb when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < header_buffer_size; current_measurement++)
+  {
+    // Determine the length of the table attached to the template.
+    uint8_t table_length = header_buffer[buffer_index + 2];
+    
+    // If currently on the requested index, return the NWb.
+    if (current_measurement == measurement_index)
+    {
+      return header_buffer[buffer_index + 1];
+    }
+    
+    // Skip over the FORMULA, NWB, TABLE_LEN, TABLE.
+    buffer_index += (3 + table_length);
+  }
+
+  return 0;
+}
+
+/**
+  Function:
+    getDataTableFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
+
+  Parameters:
+    measurement_index      -> index of the measurement whose formula must be determined (0-4)
+    amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
+    header_buffer          -> array in which a header has been stored by readGroup()
+    header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    uint8_t* -> measurement data table buffer
+
+  Description:
+    Retrieves the data table for a measurement from a buffer filled by readGroup() after it returned GROUP_HEADER.
+
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t *KLineKWP1281Lib::getDataTableFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size)
+{
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return an invalid buffer.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return nullptr;
+  }
+
+  // Go through each measurement template, returning the data table when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < header_buffer_size; current_measurement++)
+  {
+    // Determine the length of the table attached to the template.
+    uint8_t table_length = header_buffer[buffer_index + 2];
+    
+    // If currently on the requested index, return the data table.
+    if (current_measurement == measurement_index)
+    {
+      return &header_buffer[buffer_index + 3];
+    }
+    
+    // Skip over the FORMULA, NWB, TABLE_LEN, TABLE.
+    buffer_index += (3 + table_length);
+  }
+
+  return nullptr;
+}
+
+/**
+  Function:
+    getDataTableLengthFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
+
+  Parameters:
+    measurement_index      -> index of the measurement whose formula must be determined (0-4)
+    amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
+    header_buffer          -> array in which a header has been stored by readGroup()
+    header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    uint8_t -> measurement data table length
+
+  Description:
+    Retrieves the data table length for a measurement from a buffer filled by readGroup() after it returned GROUP_HEADER.
+
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getDataTableLengthFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size)
+{
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements)
+  {
+    return 0;
+  }
+
+  // Go through each measurement template, returning the data table length when on the requested index.
+  size_t buffer_index = 0;
+  for (uint8_t current_measurement = 0; current_measurement < amount_of_measurements && buffer_index < header_buffer_size; current_measurement++)
+  {
+    // Determine the length of the table attached to the template.
+    uint8_t table_length = header_buffer[buffer_index + 2];
+    
+    // If currently on the requested index, return the data table length.
+    if (current_measurement == measurement_index)
+    {
+      return header_buffer[buffer_index + 2];
+    }
+    
+    // Skip over the FORMULA, NWB, TABLE_LEN, TABLE.
+    buffer_index += (3 + table_length);
+  }
+
+  return 0;
+}
+
+/**
+  Function:
+    getMeasurementTypeFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
+
+  Parameters:
+    measurement_index      -> index of the measurement whose type must be determined (0-4)
+    amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
+    header_buffer          -> array in which a header has been stored by readGroup()
+    header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    measurementType ->
+      UNKNOWN - requested measurement outside range
+      VALUE   - get value with getMeasurementValueFromHeaderBody() and units with getMeasurementUnitsFromHeaderBody()
+      TEXT    - get text with getMeasurementTextFromHeaderBody() and, sometimes, original value with getMeasurementValueFromHeaderBody()
+
+  Description:
+    Determines the type of a measurement from a buffer filled by readGroup() after it returned GROUP_HEADER.
+
+  Notes:
+    *If an invalid measurement_index is specified, the returned type is UNKNOWN.
+    *Even if the measurement is of type TEXT, its value might contain the "origin" of the string, like a code or 16-bit value so it can be used without
+    necessarily checking the text itself.
+    *For example, for a clock measurement, the text string will contain "hh:mm", but the value will also be hh.mm (hours before decimal, minutes after).
+    *It is a static function, so it does not require an instance to be used.
+*/
+KLineKWP1281Lib::measurementType KLineKWP1281Lib::getMeasurementTypeFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size)
+{
+  // Determine the formula.
+  uint8_t formula = getFormulaFromHeader(measurement_index, amount_of_measurements, header_buffer, header_buffer_size);
+  
+  // There are no valid formulas after B5.
+  if (formula > 0xB5)
+  {
+    return UNKNOWN;
+  }
+  
+  // Only a few measurement formulas are of the "TEXT" type.
+  switch (formula)
+  {
+  case 0x00: // N/A
+  case 0x3F: // ASCII long text with unknown length (is converted to 5F by readGroup())
+  case 0x6C: // Environment
+  case 0x6D: // N/A
+  case 0x6E: // Workshop
+  // In header+body mode, "long" formulas are forbidden.
+  case 0x5F: // ASCII long text with known length
+  case 0x76: // Hex bytes with known length
+  case 0xA0: // Variable units
+    return UNKNOWN;
+
+  case 0x0A: // Warm/Cold
+  case 0x10: // Switch positions
+  case 0x88: // Switch positions
+  case 0x11: // 2 ASCII letters
+  case 0x8E: // 2 ASCII letters
+  case 0x1D: // Map1/Map2
+  case 0x25: // Text from table
+  case 0x7B: // Text from table
+  case 0x2C: // Time
+  case 0x6B: // Hex bytes
+  case 0x7F: // Date
+  case 0xA1: // Binary bytes
+  case 0x8D: // ASCII string
+    return TEXT;
+
+  default:
+    return VALUE;
+  }
+}
+
+/**
+  Function:
+    getMeasurementValueFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t header_buffer[], size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t body_buffer[], size_t body_buffer_size)
+
+  Parameters:
+    measurement_index                -> index of the measurement that needs to be calculated (0-3)
+    amount_of_measurements_in_header -> total number of measurements stored in the header array (value passed as reference to readGroup(), returned GROUP_HEADER)
+    header_buffer                    -> array in which a header has been stored by readGroup() (returned GROUP_HEADER)
+    header_buffer_size               -> total size of the given header array (provided with the sizeof() operator)
+    amount_of_measurements_in_body   -> total number of measurements stored in the body array (value passed as reference to readGroup(), returned GROUP_BODY)
+    body_buffer                      -> array in which a body has been stored by readGroup() (returned GROUP_BODY)
+    body_buffer_size                 -> total size of the given body array (provided with the sizeof() operator)
+
+  Returns:
+    double -> calculated value
+
+  Description:
+    Calculates the actual value of a measurement from two buffers filled by readGroup() after it returned GROUP_HEADER and GROUP_BODY.
+
+  Notes:
+    *If an invalid measurement_index is specified, the returned value is nan.
+    *It is a static function, so it does not require an instance to be used.
+*/
+double KLineKWP1281Lib::getMeasurementValueFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size)
+{
+  // If an invalid buffer was provided, return nan.
+  if (!header_buffer || !header_buffer_size || !body_buffer || !body_buffer_size)
+  {
+    return 0.0 / 0.0;
+  }
+  
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return nan.
+  if (measurement_index >= amount_of_measurements_in_header || measurement_index >= amount_of_measurements_in_body)
+  {
+    return 0.0 / 0.0;
+  }
+  
+  // Determine the formula.
+  uint8_t formula = getFormulaFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // In header+body mode, "long" formulas are forbidden.
+  if (formula == 0x3F || formula == 0x5F || formula == 0x76 || formula == 0x3F || formula == 0xA0)
+  {
+    return 0.0 / 0.0;
+  }
+  
+  // Determine the length of the data table provided in the header for the current formula.
+  uint8_t dataTableLength = getDataTableLengthFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // Formulas 8B, 8C, 8D and 93 are specific to header+body responses, because they require a table that is provided in the header.
+  // For formulas 8B (RPM), 8C (Temperature), 8D (Strings) and 93 (Inclination), the table length should not be 0.
+  // For all of them except formula 8D, the table length should be 17.
+  if (((formula == 0x8B || formula == 0x8C || formula == 0x93) && dataTableLength != 17) || (formula == 0x8D && dataTableLength == 0))
+  {
+    return 0.0 / 0.0;
+  }
+  
+  // Get the data table from the header.
+  uint8_t *dataTable = getDataTableFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // Get BYTE_A from the header.
+  uint8_t NWb = getNWbFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // Get BYTE_B from the body.
+  uint8_t MWb = body_buffer[measurement_index];
+  
+  // Formulas 8B, 8C and 93 are very similar.
+  if (formula == 0x8B || formula == 0x8C || formula == 0x93)
+  {
+    // Calculate the index into the data table (map table), based on the value received in the body response.
+    uint8_t map_table_index = MWb / (dataTableLength - 1);
+    
+    // In theory, the length of the map table should always be 17.
+    // Being a byte, the maximum value of MWb is 255.
+    // So, the map_table_index should be at most 255 / 16 = 15.
+    // The next byte will also be needed, so index 16 would be accessed as well, which is still fine.
+    // This means the array should never be accessed out-of-bounds, but I still choose to constrain it, just in case.
+    if (map_table_index > dataTableLength - 2)
+    {
+      map_table_index = dataTableLength - 2;
+    }
+    
+    // Retrieve the appropriate map byte from the table.
+    uint8_t map_byte = dataTable[map_table_index];
+    
+    // Calculate the difference between the next byte and this one.
+    int16_t difference = dataTable[map_table_index + 1] - map_byte;
+    
+    // Calculate the value.
+    double result = map_byte + ((difference * (MWb % (dataTableLength - 1))) / (dataTableLength - 1));
+    
+    // For formula 8B, the result is multiplied by NWb.
+    if (formula == 0x8B)
+    {
+      return result * NWb;
+    }
+    
+    // For formulas 8C and 93, NWb is subtracted from the result.
+    return result - NWb;
+  }
+  
+  // For all other formulas, use the standard function.
+  return getMeasurementValue(formula, NWb, MWb);
+}
+
+/**
+  Function:
+    getMeasurementUnitsFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t header_buffer[], size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t body_buffer[], size_t body_buffer_size, char str[], size_t string_size)
+
+  Parameters:
+    measurement_index                -> index of the measurement whose units must be determined (0-3)
+    amount_of_measurements_in_header -> total number of measurements stored in the header array (value passed as reference to readGroup(), returned GROUP_HEADER)
+    header_buffer                    -> array in which a header has been stored by readGroup() (returned GROUP_HEADER)
+    header_buffer_size               -> total size of the given header array (provided with the sizeof() operator)
+    amount_of_measurements_in_body   -> total number of measurements stored in the body array (value passed as reference to readGroup(), returned GROUP_BODY)
+    body_buffer                      -> array in which a body has been stored by readGroup() (returned GROUP_BODY)
+    body_buffer_size                 -> total size of the given body array (provided with the sizeof() operator)
+    str                              -> string (character array) into which to copy the units
+    string_size                      -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    char* -> the same character array provided (str)
+
+  Description:
+    Provides a string containing the proper units for a measurement of type VALUE from two buffers filled by readGroup() after it returned GROUP_HEADER and GROUP_BODY.
+
+  Notes:
+    *It is a static function, so it does not require an instance to be used.
+*/
+char *KLineKWP1281Lib::getMeasurementUnitsFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size, char *str, size_t string_size)
+{
+  // If an invalid buffer was provided, return an invalid string.
+  if (!header_buffer || !header_buffer_size || !body_buffer || !body_buffer_size || !str || !string_size)
+  {
+    return nullptr;
+  }
+  
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return an invalid string.
+  if (measurement_index >= amount_of_measurements_in_header || measurement_index >= amount_of_measurements_in_body)
+  {
+    return nullptr;
+  }
+  
+  // Determine the formula.
+  uint8_t formula = getFormulaFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // Get BYTE_A from the header.
+  uint8_t NWb = getNWbFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // Get BYTE_B from the body.
+  uint8_t MWb = body_buffer[measurement_index];
+  
+  // Use the standard function.
+  return getMeasurementUnits(formula, NWb, MWb, str, string_size);
+}
+
+/**
+  Function:
+    getMeasurementTextFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t header_buffer[], size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t body_buffer[], size_t body_buffer_size, char str[], size_t string_size)
+
+  Parameters:
+    measurement_index                -> index of the measurement whose text must be determined (0-3)
+    amount_of_measurements_in_header -> total number of measurements stored in the header array (value passed as reference to readGroup(), returned GROUP_HEADER)
+    header_buffer                    -> array in which a header has been stored by readGroup() (returned GROUP_HEADER)
+    header_buffer_size               -> total size of the given header array (provided with the sizeof() operator)
+    amount_of_measurements_in_body   -> total number of measurements stored in the body array (value passed as reference to readGroup(), returned GROUP_BODY)
+    body_buffer                      -> array in which a body has been stored by readGroup() (returned GROUP_BODY)
+    body_buffer_size                 -> total size of the given body array (provided with the sizeof() operator)
+    str                              -> string (character array) into which to copy the text
+    string_size                      -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    char* -> the same character array provided (str)
+
+  Description:
+    Provides a string containing the text for a measurement of type TEXT from two buffers filled by readGroup() after it returned GROUP_HEADER and GROUP_BODY..
+
+  Notes:
+    *If an invalid measurement_index is specified, the returned value is nan.
+    *It is a static function, so it does not require an instance to be used.
+*/
+char *KLineKWP1281Lib::getMeasurementTextFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size, char* str, size_t string_size)
+{
+  // If an invalid buffer was provided, return an invalid string.
+  if (!header_buffer || !header_buffer_size || !body_buffer || !body_buffer_size || !str || !string_size)
+  {
+    return nullptr;
+  }
+  
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return an invalid string.
+  if (measurement_index >= amount_of_measurements_in_header || measurement_index >= amount_of_measurements_in_body)
+  {
+    return nullptr;
+  }
+  
+  // Determine the formula.
+  uint8_t formula = getFormulaFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // In header+body mode, "long" formulas are forbidden.
+  if (formula == 0x3F || formula == 0x5F || formula == 0x76 || formula == 0x3F || formula == 0xA0)
+  {
+    return nullptr;
+  }
+  
+  // Determine the length of the data table provided in the header for the current formula.
+  uint8_t dataTableLength = getDataTableLengthFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // The table length for formula 8D should be non-zero.
+  if (formula == 0x8D && dataTableLength == 0)
+  {
+    return nullptr;
+  }
+  
+  // Get the data table from the header.
+  uint8_t *dataTable = getDataTableFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+    
+  // Get BYTE_A from the header.
+  uint8_t NWb = getNWbFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // Get BYTE_B from the body.
+  uint8_t MWb = body_buffer[measurement_index];
+  
+  // The table for formula 8D contains a list of ASCII strings, delimited by 0x03.
+  // BYTE_B is used as an index into that list, and the string that is found there is displayed.
+  if (formula == 0x8D)
+  {
+    uint8_t start_index = 0, end_index = 0;
+    uint8_t string_counter = 0;
+    
+    // Iterate through each character in the response.
+    for (uint8_t i = 0; i < dataTableLength; i++)
+    {
+      // If a terminator is found, check if this was the requested string.
+      if (dataTable[i] == 0x03)
+      {
+        // The end of this string is on the terminator.
+        end_index = i;
+        
+        // If this was the requested string, return it.
+        if (string_counter == MWb)
+        {
+          // Calculate the string's length.
+          uint8_t string_length = end_index - start_index;
+          
+          // Determine how many characters to copy.
+          uint8_t bytes_to_copy = (string_length < (string_size - 1)) ? string_length : (string_size - 1);
+          
+          // Copy the string.
+          memcpy(str, &dataTable[start_index], bytes_to_copy);
+          str[bytes_to_copy] = '\0';
+          return str;
+        }
+        // Otherwise, set the next string to start after the terminator.
+        else
+        {
+          start_index = i + 1;
+        }
+        
+        // Count the string.
+        string_counter++;
+      }
+    }
+    
+    // If the string's end is before its start, it means the last string wasn't terminated.
+    // If the last string was the one requested, copy it.
+    if ((end_index < start_index) && (MWb == string_counter))
+    {
+      // Calculate the string's length.
+      uint8_t string_length = dataTableLength - start_index;
+      
+      // Determine how many characters to copy.
+      uint8_t bytes_to_copy = (string_length < (string_size - 1)) ? string_length : (string_size - 1);
+          
+      // Copy the string.
+      memcpy(str, &dataTable[start_index], bytes_to_copy);
+      str[bytes_to_copy] = '\0';
+      return str;
+    }
+    
+    // If the requested string was not found, return an empty string.
+    str[0] = '\0';
+    return str;
+  }
+  
+  // For all other formulas, use the standard function.
+  uint8_t dummy_measurement_data[] = {NWb, MWb};
+  uint8_t dummy_measurement_data_length = 2;
+  return getMeasurementText(formula, dummy_measurement_data, dummy_measurement_data_length, str, string_size);
+}
+
+/**
+  Function:
+    getMeasurementTextLengthFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t header_buffer[], size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t body_buffer[], size_t body_buffer_size)
+
+  Parameters:
+    measurement_index                -> index of the measurement whose text length must be determined (0-3)
+    amount_of_measurements_in_header -> total number of measurements stored in the header array (value passed as reference to readGroup(), returned GROUP_HEADER)
+    header_buffer                    -> array in which a header has been stored by readGroup() (returned GROUP_HEADER)
+    header_buffer_size               -> total size of the given header array (provided with the sizeof() operator)
+    amount_of_measurements_in_body   -> total number of measurements stored in the body array (value passed as reference to readGroup(), returned GROUP_BODY)
+    body_buffer                      -> array in which a body has been stored by readGroup() (returned GROUP_BODY)
+    body_buffer_size                 -> total size of the given body array (provided with the sizeof() operator)
+
+  Returns:
+    size_t -> the length of the measurement's text
+
+  Description:
+    Provides the length of the text for a measurement of type TEXT from two buffers filled by readGroup() after it returned GROUP_HEADER and GROUP_BODY.
+
+  Notes:
+    *If an invalid measurement_index is specified, the returned value is nan.
+    *It is a static function, so it does not require an instance to be used.
+*/
+size_t KLineKWP1281Lib::getMeasurementTextLengthFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size)
+{
+  // If an invalid buffer was provided, return 0.
+  if (!header_buffer || !header_buffer_size || !body_buffer || !body_buffer_size)
+  {
+    return 0;
+  }
+  
+  // If the requested index is out of range (or the buffer doesn't contain measurements), return 0.
+  if (measurement_index >= amount_of_measurements_in_header || measurement_index >= amount_of_measurements_in_body)
+  {
+    return 0;
+  }
+  
+  // Determine the formula.
+  uint8_t formula = getFormulaFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // In header+body mode, "long" formulas are forbidden.
+  if (formula == 0x3F || formula == 0x5F || formula == 0x76 || formula == 0x3F || formula == 0xA0)
+  {
+    return 0;
+  }
+  
+  // Determine the length of the data table provided in the header for the current formula.
+  uint8_t dataTableLength = getDataTableLengthFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // The table length for formula 8D should be non-zero.
+  if (formula == 0x8D && dataTableLength == 0)
+  {
+    return 0;
+  }
+  
+  // Get the data table from the header.
+  uint8_t *dataTable = getDataTableFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+    
+  // Get BYTE_A from the header.
+  uint8_t NWb = getNWbFromHeader(measurement_index, amount_of_measurements_in_header, header_buffer, header_buffer_size);
+  
+  // Get BYTE_B from the body.
+  uint8_t MWb = body_buffer[measurement_index];
+  
+  // The table for formula 8D contains a list of ASCII strings, delimited by 0x03.
+  // BYTE_B is used as an index into that list, and the string that is found there is displayed.
+  if (formula == 0x8D)
+  {
+    uint8_t start_index = 0, end_index = 0;
+    uint8_t string_counter = 0;
+    
+    // Iterate through each character in the response.
+    for (uint8_t i = 0; i < dataTableLength; i++)
+    {
+      // If a terminator is found, check if this was the requested string.
+      if (dataTable[i] == 0x03)
+      {
+        // The end of this string is on the terminator.
+        end_index = i;
+        
+        // If this was the requested string, return its length.
+        if (string_counter == MWb)
+        {
+          return end_index - start_index;
+        }
+        // Otherwise, set the next string to start after the terminator.
+        else
+        {
+          start_index = i + 1;
+        }
+        
+        // Count the string.
+        string_counter++;
+      }
+    }
+    
+    // If the string's end is before its start, it means the last string wasn't terminated.
+    // If the last string was the one requested, return its length.
+    if ((end_index < start_index) && (MWb == string_counter))
+    {
+      return dataTableLength - start_index;
+    }
+    
+    // If the requested string was not found, return 0.
+    return 0;
+  }
+  
+  // For all other formulas, use the standard function.
+  uint8_t dummy_measurement_data[] = {NWb, MWb};
+  uint8_t dummy_measurement_data_length = 2;
+  return getMeasurementTextLength(formula, dummy_measurement_data, dummy_measurement_data_length);
+}
+
+/**
+  Function:
+    getMeasurementDecimalsFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
+
+  Parameters:
+    measurement_index      -> index of the measurement whose recommended decimals must be determined (0-4)
+    amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
+    header_buffer          -> array in which a header has been stored by readGroup()
+    header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
+
+  Returns:
+    uint8_t -> recommended decimal places
+
+  Description:
+    Determines the recommended decimal places of a measurement from a buffer filled by readGroup() after it returned GROUP_HEADER.
+
+  Notes:
+    *If an invalid measurement_index is specified, the returned value is 0.
+    *It is a static function, so it does not require an instance to be used.
+*/
+uint8_t KLineKWP1281Lib::getMeasurementDecimalsFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size)
+{
+  // Determine the formula.
+  uint8_t formula = getFormulaFromHeader(measurement_index, amount_of_measurements, header_buffer, header_buffer_size);
+  
   // Get the value from the table.
   if (formula < sizeof(KWP_decimals_table))
   {
@@ -4323,18 +5102,18 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type, uint8_t parameter)
     K_LOG_DEBUG("Received measurement group header\n");
     break;
 
-  case INVALID_GROUP_HEADER_LENGTH:
-    K_LOG_ERROR("Expected 29 bytes, got ");
+  case INVALID_GROUP_HEADER_MAP_LENGTH:
+    K_LOG_ERROR("Unexpected header table length (");
     K_LOG_ERROR_(parameter);
-    K_LOG_ERROR_("\n");
+    K_LOG_ERROR_(")\n");
     break;
 
   case RECEIVED_GROUP_BODY_OR_BASIC_SETTING:
     K_LOG_DEBUG("Received measurement group body or basic setting\n");
     break;
 
-  case INVALID_GROUP_BODY_LENGTH:
-    K_LOG_ERROR("Expected 4 bytes, got ");
+  case INVALID_GROUP_BODY_OR_BASIC_SETTING_LENGTH:
+    K_LOG_ERROR("Expected 10/<4 bytes, got ");
     K_LOG_ERROR_(parameter);
     K_LOG_ERROR_("\n");
     break;
@@ -4582,9 +5361,40 @@ void KLineKWP1281Lib::show_debug_command_description(bool direction, uint8_t com
   (void)direction;
 }
 
-bool KLineKWP1281Lib::is_long_block(uint8_t formula)
+uint8_t KLineKWP1281Lib::get_measurement_length(uint8_t *buffer, uint8_t bytes_received, uint8_t buffer_index)
 {
-  return (formula == 0x3F || formula == 0x5F || formula == 0x76);
+  // Determine the current measurement's formula.
+  uint8_t formula = buffer[buffer_index];
+      
+  // For formula 5F (ASCII text with known length) and 76 (HEX bytes with known length), the length is specified in the 2nd byte.
+  if (formula == 0x5F || formula == 0x76)
+  {
+    // Also include the formula byte and the length byte themselves in the count.
+    return buffer[buffer_index + 1] + 2;
+  }
+  // For formula 3F (ASCII text with unknown length), the entire (rest of the) response is used.
+  else if (formula == 0x3F)
+  {
+    // It should only be possible to encounter 3F in readGroup(), after receiving it from the module
+    // There, it is converted to 5F.
+    // In all other places where the measurement length is needed, bytes_received will be passed as 0 because formula 3F is impossible.
+    if (bytes_received)
+    {
+      return bytes_received - buffer_index;
+    }
+    else
+    {
+      return 0;
+    }
+  }
+  // For formula A0 (measurement with variable units), the length is 6.
+  else if (formula == 0xA0)
+  {
+    return 6;
+  }
+  
+  // Normally, a measurement takes 3 bytes.
+  return 3;
 }
 
 double KLineKWP1281Lib::ToSigned(double MW)

@@ -69,4 +69,16 @@ const char KWP_units_Ignition_BTDC[] PROGMEM = "degBTDC";
 const char KWP_units_Map1[] PROGMEM = "Map1";
 const char KWP_units_Map2[] PROGMEM = "Map2";
 
+const char KWP_units_Vss[] PROGMEM = "Vss";
+const char KWP_units_Wm2[] PROGMEM = "W/m^2";
+const char KWP_units_Wcm2[] PROGMEM = "W/cm^2";
+const char KWP_units_Wh[] PROGMEM = "Wh";
+const char KWP_units_Ws[] PROGMEM = "Ws";
+const char KWP_units_ms[] PROGMEM = "m/s";
+const char KWP_units_lkm[] PROGMEM = "l/km";
+const char KWP_units_N[] PROGMEM = "N";
+const char KWP_units_angdeg[] PROGMEM = "<deg";
+const char KWP_units_degF[] PROGMEM = "degF";
+const char KWP_units_Imp[] PROGMEM = "Imp";
+
 #endif
