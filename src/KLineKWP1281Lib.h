@@ -106,7 +106,7 @@
 
 // Helper for determining the amount of elements in an array
 #define ARRAYSIZE(x) ((sizeof(x)/sizeof(0[x])) / ((size_t)(!(sizeof(x) % sizeof(0[x])))))
-
+    
 class KLineKWP1281Lib
 {
   public:
@@ -307,7 +307,8 @@ class KLineKWP1281Lib
 
   private:
     // Formula A0 needs 8 negative powers of 10 for calculation.
-    static constexpr double negative_pow_10[8] = {1, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001, 0.0000001};
+    // They are defined at the bottom of the .cpp file.
+    static const double negative_pow_10[8];
     
     ///VARIABLES/TYPES
     static const uint8_t KWP_ACKNOWLEDGE             = 0x09; // the module has no more data to send

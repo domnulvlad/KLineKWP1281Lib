@@ -5424,3 +5424,5 @@ int KLineKWP1281Lib::compare_keyed_structs(const void *a, const void *b)
   int idB = struct_from_PGM.code;
   return (idA - idB);
 }
+
+const double KLineKWP1281Lib::negative_pow_10[] = {1, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0.000001, 0.0000001};
