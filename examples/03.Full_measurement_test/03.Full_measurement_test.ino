@@ -224,13 +224,13 @@ void showMeasurements(uint8_t group)
   // This will contain the amount of measurements in the current group, after calling the readGroup() function.
   uint8_t amount_of_measurements = 0;
 
+  // This flag keeps track if a [Header] was received for the current group, meaning it's of the "header+body" type.
+  bool received_group_header = false;
+
   // In case of the "header+body" groups, the [Body] response is the one that actually contains live data.
   // In theory, the module should report the same number of measurements in the [Header] and in the [Body].
   // Still, the number of measurements received in the [Header] will be stored separately, for correctness.
   uint8_t amount_of_measurements_in_header = 0;
-
-  // This flag keeps track if a [Header] was received for the current group, meaning it's of the "header+body" type.
-  bool received_group_header = false;
 
   // For modules which report measuring groups in the "header+body" mode, it is important to do update() when requesting a new group, so the module sends the [Header].
   diag.update();
@@ -327,18 +327,19 @@ void showMeasurements(uint8_t group)
           // Add an extra step to the loop, because this one shouldn't count, as it doesn't contain live data.
           attempt--;
         }
-        // We have nothing to display yet, the next readGroup() calls will get the actual data; skip this step of the loop.
+        // We have nothing to display yet, the next readGroup() will get the actual data; skip this step of the loop.
         continue;
 
       case KLineKWP1281Lib::GROUP_BODY:
-        // If we don't have a [Header], it doesn't make sense to receive a [Body].
-        if (!received_group_header)
         {
-          Serial.println("Error reading header! (got body)");
-          return;
+          // If we don't have a [Header], it doesn't make sense to receive a [Body].
+          if (!received_group_header)
+          {
+            Serial.println("Error reading header! (got body)");
+            return;
+          }
         }
-
-        // Otherwise, execute the code after the switch().
+        // If we have the [Header], now we also have the [Body]; execute the code after the switch().
         break;
 
       // Execute the code after the switch().
