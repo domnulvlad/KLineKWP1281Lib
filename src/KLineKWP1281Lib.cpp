@@ -3313,7 +3313,6 @@ size_t KLineKWP1281Lib::getMeasurementTextLength(uint8_t formula, uint8_t *measu
     Determines the recommended decimal places of a measurement from a buffer filled by readGroup().
 
   Notes:
-    *If an invalid measurement_index is specified, the returned value is 0.
     *It is a static function, so it does not require an instance to be used.
 */
 uint8_t KLineKWP1281Lib::getMeasurementDecimals(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size)
@@ -3389,7 +3388,7 @@ uint8_t KLineKWP1281Lib::getFormulaFromHeader(uint8_t measurement_index, uint8_t
     getNWbFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
 
   Parameters:
-    measurement_index      -> index of the measurement whose formula must be determined (0-4)
+    measurement_index      -> index of the measurement whose NWb must be determined (0-4)
     amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
     header_buffer          -> array in which a header has been stored by readGroup()
     header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
@@ -3436,7 +3435,7 @@ uint8_t KLineKWP1281Lib::getNWbFromHeader(uint8_t measurement_index, uint8_t amo
     getDataTableFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
 
   Parameters:
-    measurement_index      -> index of the measurement whose formula must be determined (0-4)
+    measurement_index      -> index of the measurement whose data table must be retrieved (0-4)
     amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
     header_buffer          -> array in which a header has been stored by readGroup()
     header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
@@ -3483,7 +3482,7 @@ uint8_t *KLineKWP1281Lib::getDataTableFromHeader(uint8_t measurement_index, uint
     getDataTableLengthFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t header_buffer[], size_t header_buffer_size)
 
   Parameters:
-    measurement_index      -> index of the measurement whose formula must be determined (0-4)
+    measurement_index      -> index of the measurement whose data table length must be determined (0-4)
     amount_of_measurements -> total number of measurements stored in the array (value passed as reference to readGroup())
     header_buffer          -> array in which a header has been stored by readGroup()
     header_buffer_size     -> total size of the given array (provided with the sizeof() operator)
@@ -3774,7 +3773,6 @@ char *KLineKWP1281Lib::getMeasurementUnitsFromHeaderBody(uint8_t measurement_ind
     Provides a string containing the text for a measurement of type TEXT from two buffers filled by readGroup() after it returned GROUP_HEADER and GROUP_BODY..
 
   Notes:
-    *If an invalid measurement_index is specified, the returned value is nan.
     *It is a static function, so it does not require an instance to be used.
 */
 char *KLineKWP1281Lib::getMeasurementTextFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size, char* str, size_t string_size)
@@ -3906,7 +3904,6 @@ char *KLineKWP1281Lib::getMeasurementTextFromHeaderBody(uint8_t measurement_inde
     Provides the length of the text for a measurement of type TEXT from two buffers filled by readGroup() after it returned GROUP_HEADER and GROUP_BODY.
 
   Notes:
-    *If an invalid measurement_index is specified, the returned value is nan.
     *It is a static function, so it does not require an instance to be used.
 */
 size_t KLineKWP1281Lib::getMeasurementTextLengthFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size)
@@ -4016,7 +4013,6 @@ size_t KLineKWP1281Lib::getMeasurementTextLengthFromHeaderBody(uint8_t measureme
     Determines the recommended decimal places of a measurement from a buffer filled by readGroup() after it returned GROUP_HEADER.
 
   Notes:
-    *If an invalid measurement_index is specified, the returned value is 0.
     *It is a static function, so it does not require an instance to be used.
 */
 uint8_t KLineKWP1281Lib::getMeasurementDecimalsFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size)
@@ -5116,10 +5112,6 @@ void KLineKWP1281Lib::show_debug_info(DEBUG_TYPE type, uint8_t parameter)
     K_LOG_ERROR("Expected 10/<4 bytes, got ");
     K_LOG_ERROR_(parameter);
     K_LOG_ERROR_("\n");
-    break;
-
-  case GROUP_BODY_NO_HEADER:
-    K_LOG_ERROR("Received measurement group body without header\n");
     break;
 
   case RECEIVED_GROUP:
