@@ -68,6 +68,7 @@ getMeasurementDecimals	KEYWORD2
 
 getFormulaFromHeader	KEYWORD2
 getNWbFromHeader	KEYWORD2
+getMWbFromBody	KEYWORD2
 getDataTableFromHeader	KEYWORD2
 getDataTableLengthFromHeader	KEYWORD2
 

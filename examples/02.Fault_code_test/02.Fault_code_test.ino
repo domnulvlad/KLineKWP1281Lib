@@ -97,10 +97,10 @@ void setup()
   
   // Connect to the module.
   /*
-    *There is an optional argument for connect()/attemptConnect(), which, if set to false, will make it so extra identification will not be requested
+    -There is an optional argument for connect()/attemptConnect(), which, if set to false, will make it so extra identification will not be requested
     if the module supports it.
-    *This would save almost one second of the connection time, with the downside being that getExtraIdentification() will return an empty string.
-    *It has no effect if the module doesn't support extra identification.
+    -This would save almost one second of the connection time, with the downside being that getExtraIdentification() will return an empty string.
+    -It has no effect if the module doesn't support extra identification.
   */
   diag.connect(connect_to_module, module_baud_rate, false);
   
@@ -110,10 +110,10 @@ void setup()
 
   // Disconnect from the module.
   /*
-    *There is an optional argument for disconnect(), which, if set to false, will make it so the library doesn't wait for a response.
-    *When disconnecting, some modules send a response, some don't.
-    *If the module doesn't send a response, not waiting saves [diag.responseTimeout] milliseconds, by default 2 seconds.
-    *If the module sends a response, not waiting for it shouldn't really have consequences.
+    -There is an optional argument for disconnect(), which, if set to false, will make it so the library doesn't wait for a response.
+    -When disconnecting, some modules send a response, some don't.
+    -If the module doesn't send a response, not waiting saves [diag.responseTimeout] milliseconds, by default 2 seconds.
+    -If the module sends a response, not waiting for it shouldn't really have consequences.
   */
   diag.disconnect(false);
   Serial.println("Disconnected.");
@@ -133,9 +133,12 @@ void showDTCs()
     Always check the return value of functions!
     
     The readFaults() function can return:
-      *KLineKWP1281Lib::SUCCESS - received fault codes
-      *KLineKWP1281Lib::FAIL    - the module doesn't support fault codes
-      *KLineKWP1281Lib::ERROR   - communication error
+      KLineKWP1281Lib::SUCCESS - received fault codes
+      KLineKWP1281Lib::FAIL    - the module doesn't support fault codes
+      KLineKWP1281Lib::ERROR   - communication error
+    
+    Technically, there are 3 more values defined for the KLineKWP1281Lib::executionStatus data type,
+    but they only apply to the readGroup() function, so they will never be returned by other functions.
   */
 
   // If fault codes were read successfully, display them.

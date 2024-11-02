@@ -115,9 +115,12 @@ void performOutputTests()
   
   /*
     The outputTests() function can return:
-      *KLineKWP1281Lib::SUCCESS - performed next output test
-      *KLineKWP1281Lib::FAIL    - the module doesn't support output tests / reached end of output tests
-      *KLineKWP1281Lib::ERROR   - communication error
+      KLineKWP1281Lib::SUCCESS - performed next output test
+      KLineKWP1281Lib::FAIL    - the module doesn't support output tests / reached end of output tests
+      KLineKWP1281Lib::ERROR   - communication error
+    
+    Technically, there are 3 more values defined for the KLineKWP1281Lib::executionStatus data type,
+    but they only apply to the readGroup() function, so they will never be returned by other functions.
   */
   
   // Run the first output test and store the return value.

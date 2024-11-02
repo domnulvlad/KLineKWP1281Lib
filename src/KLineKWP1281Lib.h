@@ -245,32 +245,32 @@ class KLineKWP1281Lib
     // Read a group (block) of measurements
     executionStatus readGroup(uint8_t &amount_of_measurements, uint8_t group, uint8_t* measurement_buffer, size_t measurement_buffer_size);
 
-    // Get the 3 significant bytes of a measurement (enough for all measurements of type VALUE)
+    // Get the 3 significant bytes of a measurement (enough for most measurements of type VALUE)
     static uint8_t getFormula(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
     static uint8_t getNWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
     static uint8_t getMWb(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
-    // Get the data and length of a measurement (necessary for some measurements of type TEXT)
+    // Get the data and length of a measurement (necessary for some measurements of type TEXT and some of type VALUE)
     static uint8_t *getMeasurementData(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
     static uint8_t getMeasurementDataLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *measurement_buffer, size_t measurement_buffer_size);
     
-    // Get a measurement's type from a group reading - only formula byte needed
+    // Get a measurement's type from a group reading - needed: [measurement array] / [formula]
     static measurementType getMeasurementType(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     static measurementType getMeasurementType(uint8_t formula);
-    // Get the calculated value of a measurement of type VALUE - formula, NWb and MWb bytes needed
+    // Get the calculated value of a measurement of type VALUE - needed: [measurement array] / [formula, measurement data, length] / [formula, NWb, MWb]
     static double getMeasurementValue(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     static double getMeasurementValue(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length);
     static double getMeasurementValue(uint8_t formula, uint8_t NWb, uint8_t MWb);
-    // Get the units of a measurement of type VALUE - formula, NWb and MWb bytes needed
+    // Get the units of a measurement of type VALUE - needed: [measurement array] / [formula, measurement data, length] / [formula, NWb, MWb]
     static char* getMeasurementUnits(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size);
     static char* getMeasurementUnits(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size);
     static char* getMeasurementUnits(uint8_t formula, uint8_t NWb, uint8_t MWb, char* str, size_t string_size);
-    // Get the text of a measurement of type TEXT - measurement data and length needed
+    // Get the text of a measurement of type TEXT - needed: [measurement array] / [formula, measurement data, length]
     static char* getMeasurementText(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size, char* str, size_t string_size);
     static char* getMeasurementText(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length, char* str, size_t string_size);
-    // Get the length of the text of a measurement of type TEXT - measurement data and length needed
+    // Get the length of the text of a measurement of type TEXT - needed: [measurement array] / [formula, measurement data, length]
     static size_t getMeasurementTextLength(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     static size_t getMeasurementTextLength(uint8_t formula, uint8_t *measurement_data, uint8_t measurement_data_length);
-    // Get the recommended decimal places of a measurement (of type VALUE) - only formula byte needed
+    // Get the recommended decimal places of a measurement (of type VALUE) - needed: [measurement array] / [formula]
     static uint8_t getMeasurementDecimals(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t* measurement_buffer, size_t measurement_buffer_size);
     static uint8_t getMeasurementDecimals(uint8_t formula);
     
@@ -278,22 +278,30 @@ class KLineKWP1281Lib
     static uint8_t getFormulaFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size);
     // Get the constant byte of a measurement from a header of a header+body response
     static uint8_t getNWbFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size);
+    // Get the live data byte of a measurement from a body of a header+body response
+    static uint8_t getMWbFromBody(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *body_buffer, size_t body_buffer_size);
     // Get the data table and its length of a measurement from a header of a header+body response.
     static uint8_t *getDataTableFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size);
     static uint8_t getDataTableLengthFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size);
     
-    // Get a measurement's type from a group reading of type header+body - only header array needed
+    // Get a measurement's type from a group reading of type header+body - needed: [header array] / [formula]
     static measurementType getMeasurementTypeFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size);
-    // Get the calculated value of a measurement of type VALUE from a group reading of type header+body - header and body arrays needed
+    static measurementType getMeasurementTypeFromHeader(uint8_t formula);
+    // Get the calculated value of a measurement of type VALUE from a group reading of type header+body - needed: [header array, body array] / [formula, NWb, MWb, data table, length]
     static double getMeasurementValueFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size);
-    // Get the units of a measurement of type VALUE from a group reading of type header+body - header and body arrays needed
+    static double getMeasurementValueFromHeaderBody(uint8_t formula, uint8_t NWb, uint8_t MWb, uint8_t *data_table, uint8_t data_table_length);
+    // Get the units of a measurement of type VALUE from a group reading of type header+body - needed: [header array, body array] / [formula, NWb, MWb]
     static char* getMeasurementUnitsFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size, char* str, size_t string_size);
-    // Get the text of a measurement of type TEXT from a group reading of type header+body - header and body arrays needed
+    static char* getMeasurementUnitsFromHeaderBody(uint8_t formula, uint8_t NWb, uint8_t MWb, char* str, size_t string_size);
+    // Get the text of a measurement of type TEXT from a group reading of type header+body - needed: [header array, body array] / [formula, NWb, MWb, data table, length]
     static char* getMeasurementTextFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size, char* str, size_t string_size);
-    // Get the length of the text of a measurement of type TEXT from a group reading of type header+body - header and body arrays needed
+    static char* getMeasurementTextFromHeaderBody(uint8_t formula, uint8_t NWb, uint8_t MWb, uint8_t *data_table, uint8_t data_table_length, char* str, size_t string_size);
+    // Get the length of the text of a measurement of type TEXT from a group reading of type header+body - needed: [header array, body array] / [formula, NWb, MWb, data table, length]
     static size_t getMeasurementTextLengthFromHeaderBody(uint8_t measurement_index, uint8_t amount_of_measurements_in_header, uint8_t *header_buffer, size_t header_buffer_size, uint8_t amount_of_measurements_in_body, uint8_t *body_buffer, size_t body_buffer_size);
-    // Get the recommended decimal places of a measurement from a group reading of type header+body - only header array needed
+    static size_t getMeasurementTextLengthFromHeaderBody(uint8_t formula, uint8_t NWb, uint8_t MWb, uint8_t *data_table, uint8_t data_table_length);
+    // Get the recommended decimal places of a measurement from a group reading of type header+body - needed: [header array] / [formula]
     static uint8_t getMeasurementDecimalsFromHeader(uint8_t measurement_index, uint8_t amount_of_measurements, uint8_t *header_buffer, size_t header_buffer_size);
+    static uint8_t getMeasurementDecimalsFromHeader(uint8_t formula);
 
     // Read a chunk of ROM/EEPROM
     executionStatus readROM(uint8_t chunk_size, uint16_t start_address, size_t &bytes_received, uint8_t* memory_buffer, uint8_t memory_buffer_size);
@@ -354,7 +362,7 @@ class KLineKWP1281Lib
     // Flag to indicate whether or not the used Serial port can receive at the same time as sending
     bool _full_duplex;
     
-    //Optional debug port
+    // Optional debug port
     Stream* _debug_port;
 
     // Return types for some functions
